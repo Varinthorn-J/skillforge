@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Generator — SkillForge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #090d16;
+            --bg-surface: #111827;
+            --bg-elevated: #1a2235;
+            --border: #1f2b3d;
+            --border-hover: #2a3a52;
+            --text-primary: #e8ecf4;
+            --text-secondary: #7b8ba5;
+            --text-muted: #4a5568;
+            --accent: #c4f042;
+            --accent-dim: #c4f04218;
+            --accent-mid: #c4f04240;
+            --error: #ef4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-surface);
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+        }
+        .logo-mark {
+            width: 28px; height: 28px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-mark svg { width: 16px; height: 16px; }
+        .logo-text {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            font-size: 1.05rem;
+            letter-spacing: -0.02em;
+        }
+        .nav-links { display: flex; gap: 0.25rem; }
+        .nav-link {
+            padding: 0.4rem 0.85rem;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: background 0.15s, color 0.15s;
+        }
+        .nav-link:hover { background: var(--bg-elevated); color: var(--text-primary); }
+        .nav-link.active { background: var(--accent-dim); color: var(--accent); }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .controls {
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        .panel-section {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .panel-label {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .upload-zone {
+            border: 1px dashed var(--border-hover);
+            border-radius: 8px;
+            padding: 1.25rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .upload-zone:hover { border-color: var(--accent); background: var(--accent-dim); }
+        .upload-zone.has-file {
+            border-style: solid;
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+        .upload-zone input { display: none; }
+        .upload-icon {
+            width: 32px; height: 32px;
+            margin: 0 auto 0.4rem;
+            border-radius: 6px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .upload-icon svg { width: 16px; height: 16px; color: var(--text-secondary); }
+        .upload-zone.has-file .upload-icon svg { color: var(--accent); }
+        .upload-text { font-size: 0.78rem; color: var(--text-secondary); }
+        .upload-text strong { color: var(--text-primary); font-weight: 500; }
+        .file-badge {
+            display: inline-flex;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--accent);
+            margin-top: 0.2rem;
+        }
+
+        .btn-add-output {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .btn-add-output:hover { border-color: var(--accent); color: var(--accent); }
+        .output-slot {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .output-slot .upload-zone { flex: 1; }
+        .btn-remove-slot {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.1rem;
+            padding: 0.25rem;
+            border-radius: 4px;
+            line-height: 1;
+        }
+        .btn-remove-slot:hover { color: var(--error); }
+        .input-field {
+            width: 100%;
+            padding: 0.55rem 0.75rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .input-field:focus { border-color: var(--accent); }
+        .input-field::placeholder { color: var(--text-muted); }
+
+        .panel-actions {
+            padding: 1.25rem 1.5rem;
+            margin-top: auto;
+            border-top: 1px solid var(--border);
+        }
+        .btn {
+            width: 100%;
+            padding: 0.7rem 1.25rem;
+            background: var(--accent);
+            color: var(--bg-deep);
+            border: none;
+            border-radius: 8px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { background: var(--bg-elevated); color: var(--text-muted); cursor: not-allowed; border: 1px solid var(--border); }
+
+        /* Output panel */
+        .output {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .output-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-surface);
+        }
+        .output-header .panel-label { margin-bottom: 0; }
+        .output-body {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            padding: 2rem;
+            text-align: center;
+        }
+        .empty-state p { font-size: 0.85rem; max-width: 300px; line-height: 1.5; }
+
+        .loading-state {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 1rem;
+        }
+        .loading-state.visible { display: flex; }
+        .loading-ring {
+            width: 40px; height: 40px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-state p { font-size: 0.85rem; color: var(--text-secondary); }
+
+        .pipeline-bar {
+            height: 2px;
+            background: var(--border);
+            position: relative;
+            overflow: hidden;
+            display: none;
+        }
+        .pipeline-bar.active { display: block; }
+        .pipeline-bar::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -40%;
+            width: 40%; height: 100%;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            animation: pipeline-flow 1.2s ease-in-out infinite;
+        }
+        @keyframes pipeline-flow { to { left: 100%; } }
+
+        /* Skill editor */
+        .skill-editor-wrap {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+        }
+        .skill-editor-wrap.visible { display: flex; }
+        .skill-editor {
+            flex: 1;
+            width: 100%;
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            border: none;
+            padding: 1.25rem 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.7;
+            resize: none;
+            outline: none;
+        }
+        .editor-actions {
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.85rem 1.5rem;
+            border-top: 1px solid var(--border);
+            background: var(--bg-surface);
+        }
+        .btn-save {
+            padding: 0.55rem 1.25rem;
+            background: var(--accent);
+            color: var(--bg-deep);
+            border: none;
+            border-radius: 6px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-save:hover { opacity: 0.9; }
+        .btn-secondary {
+            padding: 0.55rem 1.25rem;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .btn-secondary:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            padding: 0.65rem 1.25rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            color: var(--accent);
+            font-size: 0.85rem;
+            font-weight: 500;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+            pointer-events: none;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+
+        footer {
+            padding: 0.6rem 1.5rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        @media (max-width: 768px) {
+            .workspace { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+            .controls { border-right: none; border-bottom: 1px solid var(--border); }
+            .panel-actions { margin-top: 0; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <div class="logo-mark">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M2 5h4v2H2zm0 4h4v2H2zm8-4h4v2h-4zm0 4h4v2h-4zM7 7l2 1-2 1V7z" fill="#090d16"/></svg>
+            </div>
+            <span class="logo-text">SkillForge</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Transform</a>
+            <a href="/generator" class="nav-link active">Skill Generator</a>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <div class="controls">
+            <div class="panel-section">
+                <div class="panel-label">Skill Name</div>
+                <input type="text" class="input-field" id="skillName" placeholder="e.g. POS to AP FBDI">
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-label">Input File (Source)</div>
+                <div class="upload-zone" id="inputZone" onclick="document.getElementById('inputFile').click()">
+                    <div class="upload-icon">
+                        <svg viewBox="0 0 18 18" fill="none"><path d="M9 2v10M5 6l4-4 4 4M3 13v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <p class="upload-text"><strong>Source CSV</strong></p>
+                    <input type="file" id="inputFile" accept=".csv,.txt,.json">
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-label" style="display:flex;justify-content:space-between;align-items:center;">
+                    Output Files (Desired Result)
+                    <button class="btn-add-output" onclick="addOutputSlot()">+ Add file</button>
+                </div>
+                <div id="outputSlots"></div>
+            </div>
+
+            <div class="panel-actions">
+                <button class="btn" id="generateBtn" disabled onclick="generateSkill()">Generate Skill</button>
+            </div>
+        </div>
+
+        <div class="output">
+            <div class="output-header">
+                <div class="panel-label">Generated Skill</div>
+            </div>
+            <div class="pipeline-bar" id="pipelineBar"></div>
+            <div class="output-body">
+                <div class="empty-state" id="emptyState">
+                    <p>Upload an input file and its desired output. The AI will analyze the mapping and generate a reusable skill template.</p>
+                </div>
+                <div class="loading-state" id="loadingState">
+                    <div class="loading-ring"></div>
+                    <p>Analyzing mapping patterns...</p>
+                </div>
+                <div class="skill-editor-wrap" id="editorWrap">
+                    <textarea class="skill-editor" id="skillEditor" spellcheck="false"></textarea>
+                    <div class="editor-actions">
+                        <button class="btn-save" onclick="saveSkill()">Save as Skill</button>
+                        <button class="btn-secondary" onclick="copySkill()">Copy to Clipboard</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <footer>Skill Generator — create transform skills by example</footer>
+
+    <script>
+        let inputFileData = null;
+        let outputFiles = [];
+        let slotCounter = 0;
+
+        function setupZone(zone, fileInput, onFile) {
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length) onFile(e.target.files[0], zone);
+            });
+            zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('has-file'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('has-file'));
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files.length) onFile(e.dataTransfer.files[0], zone);
+            });
+        }
+
+        function markUploaded(file, zone) {
+            zone.classList.add('has-file');
+            zone.innerHTML = `
+                <div class="upload-icon"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2v10M5 6l4-4 4 4M3 13v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                <div class="file-badge">${file.name}</div>`;
+        }
+
+        // Input file setup
+        setupZone(
+            document.getElementById('inputZone'),
+            document.getElementById('inputFile'),
+            (file, zone) => { inputFileData = file; markUploaded(file, zone); updateGenerateBtn(); }
+        );
+
+        // Output slots
+        function addOutputSlot() {
+            const id = slotCounter++;
+            const container = document.getElementById('outputSlots');
+            const slot = document.createElement('div');
+            slot.className = 'output-slot';
+            slot.id = `slot_${id}`;
+            slot.innerHTML = `
+                <div class="upload-zone" id="ozone_${id}" onclick="document.getElementById('ofile_${id}').click()">
+                    <div class="upload-icon"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2v10M5 6l4-4 4 4M3 13v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    <p class="upload-text"><strong>Target CSV</strong></p>
+                    <input type="file" id="ofile_${id}" accept=".csv,.txt,.json" style="display:none">
+                </div>
+                <button class="btn-remove-slot" onclick="removeOutputSlot(${id})" title="Remove">&times;</button>`;
+            container.appendChild(slot);
+
+            const zone = document.getElementById(`ozone_${id}`);
+            const input = document.getElementById(`ofile_${id}`);
+            setupZone(zone, input, (file, z) => {
+                outputFiles[id] = file;
+                markUploaded(file, z);
+                updateGenerateBtn();
+            });
+        }
+
+        function removeOutputSlot(id) {
+            document.getElementById(`slot_${id}`)?.remove();
+            delete outputFiles[id];
+            updateGenerateBtn();
+        }
+
+        // Start with one output slot
+        addOutputSlot();
+
+        function getOutputFiles() {
+            return Object.values(outputFiles).filter(Boolean);
+        }
+
+        function updateGenerateBtn() {
+            document.getElementById('generateBtn').disabled = !(inputFileData && getOutputFiles().length > 0);
+        }
+
+        async function generateSkill() {
+            const btn = document.getElementById('generateBtn');
+            const loading = document.getElementById('loadingState');
+            const empty = document.getElementById('emptyState');
+            const editor = document.getElementById('editorWrap');
+            const pipeline = document.getElementById('pipelineBar');
+
+            btn.disabled = true;
+            empty.style.display = 'none';
+            editor.classList.remove('visible');
+            loading.classList.add('visible');
+            pipeline.classList.add('active');
+
+            const form = new FormData();
+            form.append('input_file', inputFileData);
+            getOutputFiles().forEach(f => form.append('output_files', f));
+            form.append('skill_name', document.getElementById('skillName').value);
+
+            try {
+                const res = await fetch('/api/generate-skill', { method: 'POST', body: form });
+                const data = await res.json();
+
+                loading.classList.remove('visible');
+                pipeline.classList.remove('active');
+
+                if (data.skill_content) {
+                    document.getElementById('skillEditor').value = data.skill_content;
+                    editor.classList.add('visible');
+                } else {
+                    empty.style.display = 'flex';
+                    empty.querySelector('p').textContent = data.error || 'Generation failed';
+                }
+            } catch (err) {
+                loading.classList.remove('visible');
+                pipeline.classList.remove('active');
+                empty.style.display = 'flex';
+                empty.querySelector('p').textContent = 'Connection failed: ' + err.message;
+            }
+
+            btn.disabled = false;
+        }
+
+        async function saveSkill() {
+            const content = document.getElementById('skillEditor').value;
+            const name = document.getElementById('skillName').value || 'generated_skill';
+            const filename = name.toLowerCase().replace(/\s+/g, '_') + '.md';
+
+            const form = new FormData();
+            form.append('skill_content', content);
+            form.append('skill_filename', filename);
+
+            try {
+                const res = await fetch('/api/upload-skill', { method: 'POST', body: form });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showToast(`Skill saved as ${data.filename}`);
+                } else {
+                    showToast(data.error || 'Save failed');
+                }
+            } catch (err) {
+                showToast('Save failed: ' + err.message);
+            }
+        }
+
+        function copySkill() {
+            const text = document.getElementById('skillEditor').value;
+            navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2500);
+        }
+    </script>
+</body>
+</html>
