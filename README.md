@@ -115,8 +115,8 @@ ai-data-transformer/
 ├── requirements.txt
 ├── skills/                 # Skill definitions (the brain)
 │   ├── _TEMPLATE.md        # Template for writing new skills
-│   ├── csv-transform.md
-│   ├── summarize-csv.md
+│   ├── csv_transform.md
+│   ├── summarize_csv.md
 │   └── ap_to_fbdi_template.md
 ├── templates/
 │   ├── index.html          # Transform page
