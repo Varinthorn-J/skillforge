@@ -1,6 +1,8 @@
 # SkillForge
 
-A skill-driven data transformation engine powered by a local LLM. Upload a file, pick a skill, and let the AI handle the rest — all processing stays on your machine.
+Local LLM-powered data transformation framework. Define transformation logic in **skill.md** files (the "brain"), while Python handles only common I/O (the "hands"). Upload input and output examples to auto-generate skills, then transform data through a visual web UI — all processing stays on your machine.
+
+![SkillForge Transform](docs/screenshot.png)
 
 ## How It Works
 
@@ -18,74 +20,67 @@ A skill-driven data transformation engine powered by a local LLM. Upload a file,
                                                │
                                                ▼
                                       ┌──────────────┐
-                                      │  Common I/O  │
-                                      │  save / zip  │
-                                      └──────┬───────┘
-                                               │
-                                               ▼
-                                      ┌──────────────┐
                                       │  Download     │
                                       │  CSV / ZIP    │
                                       └──────────────┘
 ```
 
 **Skill.md** controls all transformation logic — mapping rules, business rules, output format.
-
-**Code** only handles common I/O — save CSV, split files, create ZIP, validate output, serve downloads. No business logic in code.
+**Code** only handles common I/O — save CSV, split files, create ZIP, validate output, serve downloads.
 
 ## Features
 
 - **Transform** — Upload a file, pick a skill, get transformed output with validation
 - **Skill Generator** — Upload input + desired output(s), AI generates a reusable skill template
-- **Validation** — Auto-checks CSV structure, date formats, numeric values, cross-file key consistency
-- **Multi-file output** — Skills can produce multiple files (e.g. FBDI header + lines + property), bundled as ZIP
-
-## Tech Stack
-
-- **Backend:** Python, FastAPI, Uvicorn
-- **LLM:** Qwen 2.5 Coder 3B Instruct via LM Studio (localhost:1234)
-- **Frontend:** Single-page HTML (no framework)
-- **Architecture:** Skill-driven — add new transforms by writing a `.md` file
-
-## Prerequisites
-
-- Python 3.10+
-- LM Studio with Qwen2.5-Coder-3B-Instruct loaded
+- **Multi-file output** — `---SPLIT---` markers for generating multiple files (e.g. AP Headers + Lines), bundled as ZIP
+- **Real-time logs** — SSE-powered log panel shows LLM processing as it happens
+- **Validation engine** — CSV structure, date formats, numeric values, cross-file key consistency
+- **Skill management** — Create, edit, delete, upload skills with category tags (Example/Custom)
+- **Configurable** — `.env` for LLM endpoint, model, output naming, directories
+- **Keyboard shortcuts** — Ctrl+Enter to transform, Escape to close panels
 
 ## Quick Start
 
-### 1. Start LM Studio
+### Prerequisites
 
-1. Open LM Studio
-2. Load **Qwen2.5-Coder-3B-Instruct-GGUF** model
-3. Go to **Developer / Local Server** tab
-4. Start server on port **1234** (`http://127.0.0.1:1234`)
+- Python 3.10+
+- [LM Studio](https://lmstudio.ai/) (or any OpenAI-compatible local LLM server)
 
-### 2. Setup Project
+### Setup
 
 ```bash
-cd D:\ai-data-transformer
-
-# Create virtual environment
+git clone https://github.com/Varinthorn-J/skillforge.git
+cd skillforge
 python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # macOS/Linux
 
-# Activate (Windows PowerShell)
-.venv\Scripts\activate
-
-# Install dependencies
 pip install -r requirements.txt
+cp .env.example .env
 ```
 
-### 3. Run the App
+### Run
+
+1. Start LM Studio and load a model (e.g. Qwen 2.5 Coder 3B Instruct)
+2. Start the local server on port 1234
 
 ```bash
 uvicorn app:app --reload --port 8000
 ```
 
-### 4. Open in Browser
+3. Open [http://localhost:8000](http://localhost:8000)
 
-- **Transform page:** `http://localhost:8000`
-- **Skill Generator:** `http://localhost:8000/generator`
+## Configuration
+
+Edit `.env` to customize:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_BASE_URL` | `http://127.0.0.1:1234/v1` | OpenAI-compatible API endpoint |
+| `LLM_MODEL` | `qwen2.5-coder-3b-instruct` | Model name |
+| `OUTPUT_PREFIX` | `skillforge` | Prefix for output filenames |
+| `OUTPUT_SUFFIX` | _(empty)_ | Suffix for output filenames |
+| `LOG_LEVEL` | `INFO` | Logging level |
 
 ## Pages
 
@@ -93,7 +88,7 @@ uvicorn app:app --reload --port 8000
 
 1. Select a skill from the list
 2. Upload your input file (CSV)
-3. Click **Transform**
+3. Click **Transform** (or Ctrl+Enter)
 4. View results in table preview with validation report
 5. Download output as CSV or ZIP (multi-file)
 
@@ -101,40 +96,9 @@ uvicorn app:app --reload --port 8000
 
 1. Enter a skill name
 2. Upload **input file** (source CSV)
-3. Upload **output file(s)** (desired result — click "+ Add file" for multiple outputs like header, lines, property)
+3. Upload **output file(s)** (click "+ Add file" for multiple outputs)
 4. Click **Generate Skill** — AI analyzes the mapping and creates a skill template
-5. Review and edit the generated skill in the editor
-6. Click **Save as Skill** — saves to `skills/` folder and becomes available immediately
-7. Go to Transform page to use the new skill
-
-## Project Structure
-
-```
-ai-data-transformer/
-├── app.py                  # FastAPI server (common I/O + validation only)
-├── requirements.txt
-├── skills/                 # Skill definitions (the brain)
-│   ├── _TEMPLATE.md        # Template for writing new skills
-│   ├── csv_transform.md
-│   ├── summarize_csv.md
-│   └── ap_to_fbdi_template.md
-├── templates/
-│   ├── index.html          # Transform page
-│   └── generator.html      # Skill Generator page
-├── services/
-│   ├── skill_loader.py     # Reads skill.md files
-│   └── validator.py        # Output validation (CSV structure, dates, numbers, keys)
-├── test_data/
-│   ├── legacy_pos.csv                  # Sample input (20 rows POS data)
-│   ├── example_output_ap_headers.csv   # Example FBDI header output
-│   ├── example_output_ap_lines.csv     # Example FBDI lines output
-│   └── spec_ap_invoice_mapping.md      # Mapping specification reference
-├── uploads/                # Uploaded files (auto-created)
-├── outputs/                # Generated files (auto-created)
-├── domain/                 # Pydantic models (legacy)
-├── port/                   # Port interfaces (legacy)
-└── adapters/               # Adapter implementations (legacy)
-```
+5. Review, edit, then **Save as Skill**
 
 ## Writing a Skill
 
@@ -142,19 +106,27 @@ Create a `.md` file in `skills/` (or use the Skill Generator):
 
 ```markdown
 ---
-name: My Skill
-description: What this skill does
+name: POS to AP FBDI
+description: Transform POS transactions to Oracle AP FBDI format
 input_types: [".csv"]
+output_files: ["ap_headers", "ap_lines"]
+category: custom
 ---
 
-# My Skill
+# Transformation Rules
 
-(Instructions for the LLM — source schema, mapping rules, output format)
+For EACH input row, create:
+- 1 row in the HEADER file
+- 2 rows in the LINES file (ITEM + TAX)
+
+## Header File Columns
+INVOICE_NUM = bill_no
+INVOICE_DATE = txn_date (change / to -)
+VENDOR_NAME = customer_name
+...
 ```
 
-The skill.md content becomes the LLM's system prompt. The uploaded file content is sent as the user message.
-
-See `skills/_TEMPLATE.md` for a detailed template.
+The Markdown body becomes the LLM system prompt. The uploaded file is sent as the user message.
 
 ### Output Conventions
 
@@ -164,24 +136,46 @@ See `skills/_TEMPLATE.md` for a detailed template.
 | Sections separated by `---SPLIT---` | Split into multiple CSV files + bundled as ZIP |
 | Plain text | Displayed as-is in the UI |
 
-### Validation
+## Project Structure
 
-Output is automatically validated for:
-- CSV structure (consistent column count)
-- Empty values (warnings)
-- Date format (columns containing "DATE" → must be YYYY-MM-DD)
-- Numeric values (columns containing "AMOUNT"/"NUMBER" → must be valid numbers)
-- Cross-file key consistency (keys in lines file must exist in header file)
+```
+skillforge/
+├── app.py                    # FastAPI server + LLM integration
+├── services/
+│   ├── skill_loader.py       # Parses .md skills with frontmatter
+│   ├── validator.py          # CSV validation engine
+│   └── transformer_service.py
+├── skills/                   # Skill .md files (the "brain")
+├── templates/
+│   ├── index.html            # Transform page
+│   ├── generator.html        # Skill Generator page
+│   └── logs.html             # Standalone logs page
+├── static/style.css          # Shared CSS
+├── test_data/                # Sample input/output files
+├── .env.example              # Configuration template
+└── requirements.txt
+```
 
 ## API Reference
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/` | Transform page |
-| GET | `/generator` | Skill Generator page |
-| GET | `/api/skills` | List available skills |
-| POST | `/api/process` | Upload file + skill_id → transform |
-| POST | `/api/generate-skill` | Upload input + output(s) → generate skill.md |
-| POST | `/api/upload-skill` | Save skill content to skills/ folder |
-| POST | `/api/reload-skills` | Reload skills from disk |
-| GET | `/api/download/{filename}` | Download output file (CSV or ZIP) |
+| `GET` | `/` | Transform page |
+| `GET` | `/generator` | Skill Generator page |
+| `GET` | `/api/skills` | List available skills |
+| `GET` | `/api/skills/{id}` | Get skill content |
+| `PUT` | `/api/skills/{id}` | Update skill content |
+| `DELETE` | `/api/skills/{id}` | Delete a skill |
+| `POST` | `/api/process` | Transform: upload file + skill_id |
+| `POST` | `/api/generate-skill` | Generate skill from input + output examples |
+| `POST` | `/api/upload-skill` | Upload/save a skill file |
+| `GET` | `/api/config` | Get current LLM config |
+| `GET` | `/api/logs/stream` | SSE real-time log stream |
+| `GET` | `/api/download/{filename}` | Download output file |
+
+## Tech Stack
+
+- **Backend**: Python, FastAPI, Uvicorn
+- **LLM**: Any OpenAI-compatible server (LM Studio, Ollama, vLLM)
+- **Frontend**: Vanilla HTML/CSS/JS (no build step)
+- **Fonts**: Space Grotesk + Inter + JetBrains Mono
