@@ -29,7 +29,9 @@ def main():
     - SOURCE (Target column, must be DEFAULT with value 'POS_LEGACY')
     """
 
-    print("=== Starting Transformation Pipeline ===")
+    import logging
+    logger = logging.getLogger("skillforge")
+    logger.info("Starting Transformation Pipeline")
     service.run_pipeline(
         input_file_path=input_file,
         target_schema_spec=target_schema,

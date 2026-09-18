@@ -86,7 +86,7 @@ def _validate_date_columns(result: ValidationResult, name: str, content: str):
     reader = csv.DictReader(io.StringIO(content.strip()))
     for i, row in enumerate(reader, start=2):
         for col in date_cols:
-            val = row.get(col, "").strip()
+            val = (row.get(col) or "").strip()
             if val and not date_pattern.match(val):
                 result.add("error", name, f"Invalid date format '{val}', expected YYYY-MM-DD", row=i, column=col)
 
@@ -101,7 +101,7 @@ def _validate_numeric_columns(result: ValidationResult, name: str, content: str)
     reader = csv.DictReader(io.StringIO(content.strip()))
     for i, row in enumerate(reader, start=2):
         for col in numeric_cols:
-            val = row.get(col, "").strip()
+            val = (row.get(col) or "").strip()
             if not val:
                 continue
             try:
@@ -117,25 +117,27 @@ def _validate_cross_file_keys(result: ValidationResult, sections: list[dict]):
     header_fields = header_reader.fieldnames or []
     lines_fields = lines_reader.fieldnames or []
 
+    key_indicators = {"NUM", "ID", "KEY", "CODE"}
     common_keys = set(header_fields) & set(lines_fields)
-    if not common_keys:
+    key_candidates = [c for c in common_keys if any(k in c.upper() for k in key_indicators)]
+    if not key_candidates:
         return
 
-    key_col = sorted(common_keys)[0]
+    key_col = sorted(key_candidates)[0]
 
     header_keys = set()
     for row in header_reader:
-        val = row.get(key_col, "").strip()
+        val = (row.get(key_col) or "").strip()
         if val:
             header_keys.add(val)
 
     for i, row in enumerate(lines_reader, start=2):
-        val = row.get(key_col, "").strip()
+        val = (row.get(key_col) or "").strip()
         if val and val not in header_keys:
             result.add("error", sections[1]["name"], f"Key '{val}' not found in header file", row=i, column=key_col)
 
     header_reader2 = csv.DictReader(io.StringIO(sections[0]["content"].strip()))
-    header_keys_list = [row.get(key_col, "").strip() for row in header_reader2]
+    header_keys_list = [(row.get(key_col) or "").strip() for row in header_reader2]
     seen = set()
     for i, k in enumerate(header_keys_list, start=2):
         if k in seen:

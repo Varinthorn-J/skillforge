@@ -10,6 +10,8 @@ class Skill:
     description: str
     input_types: list[str]
     instructions: str
+    output_files: list[str] | None = None
+    category: str = ""
 
 
 def load_skills(skills_dir: str = "skills") -> list[Skill]:
@@ -26,12 +28,18 @@ def load_skills(skills_dir: str = "skills") -> list[Skill]:
             content = f.read()
 
         frontmatter, body = _parse_frontmatter(content)
+        output_files = frontmatter.get("output_files", None)
+        if isinstance(output_files, str):
+            output_files = [output_files]
+
         skills.append(Skill(
             id=filename.removesuffix(".md"),
             name=frontmatter.get("name", filename),
             description=frontmatter.get("description", ""),
             input_types=frontmatter.get("input_types", []),
             instructions=body.strip(),
+            output_files=output_files,
+            category=frontmatter.get("category", ""),
         ))
 
     return skills

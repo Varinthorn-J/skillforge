@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logs — SkillForge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .log-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .log-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-surface);
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .log-toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .log-toolbar .panel-label { margin: 0; }
+        .log-filter { display: flex; gap: 0.25rem; }
+        .log-toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .log-count {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .btn-sm {
+            padding: 0.3rem 0.7rem;
+            border-radius: 5px;
+            font-size: 0.75rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-sm.auto-active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+        .log-body-full {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            line-height: 1.7;
+        }
+        .log-body-full .log-entry {
+            grid-template-columns: 160px 60px 1fr;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <div class="logo-mark">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M2 5h4v2H2zm0 4h4v2H2zm8-4h4v2h-4zm0 4h4v2h-4zM7 7l2 1-2 1V7z" fill="#090d16"/></svg>
+            </div>
+            <span class="logo-text">SkillForge</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1.5rem;">
+            <div class="nav-links">
+                <a href="/" class="nav-link">Transform</a>
+                <a href="/generator" class="nav-link">Skill Generator</a>
+                <a href="/logs" class="nav-link active">Logs</a>
+            </div>
+            <div class="header-status">
+                <div class="status-dot connected" id="statusDot"></div>
+                <span id="statusText">LM Studio connected</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="log-container">
+        <div class="log-toolbar">
+            <div class="log-toolbar-left">
+                <div class="panel-label">Application Logs</div>
+                <div class="log-filter">
+                    <button class="log-filter-btn active" onclick="setFilter('ALL', this)">All</button>
+                    <button class="log-filter-btn" onclick="setFilter('INFO', this)">Info</button>
+                    <button class="log-filter-btn" onclick="setFilter('WARNING', this)">Warn</button>
+                    <button class="log-filter-btn" onclick="setFilter('ERROR', this)">Error</button>
+                    <button class="log-filter-btn" onclick="setFilter('DEBUG', this)">Debug</button>
+                </div>
+            </div>
+            <div class="log-toolbar-right">
+                <span class="log-count" id="logCount">0 entries</span>
+                <button class="btn-sm auto-active" id="autoRefreshBtn" onclick="toggleAutoRefresh()">Auto-refresh</button>
+                <button class="btn-sm" onclick="fetchLogs()">Refresh</button>
+            </div>
+        </div>
+        <div class="log-body-full" id="logBody">
+            <div class="log-empty">No logs yet. Process a file to see activity.</div>
+        </div>
+    </div>
+
+    <footer>
+        <span>Log buffer: last 500 entries</span>
+    </footer>
+
+    <script>
+        let allLogs = [];
+        let currentFilter = 'ALL';
+        let autoRefresh = true;
+        let refreshInterval = null;
+
+        function escapeHtml(str) {
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/logs?limit=500');
+                const data = await res.json();
+                allLogs = data.logs;
+                renderLogs();
+            } catch {
+                document.getElementById('statusDot').classList.remove('connected');
+                document.getElementById('statusText').textContent = 'Server unreachable';
+            }
+        }
+
+        function renderLogs() {
+            const body = document.getElementById('logBody');
+            const filtered = currentFilter === 'ALL'
+                ? allLogs
+                : allLogs.filter(l => l.level === currentFilter);
+
+            document.getElementById('logCount').textContent = `${filtered.length} entries`;
+
+            if (filtered.length === 0) {
+                body.innerHTML = '<div class="log-empty">No logs match the current filter.</div>';
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(log => {
+                html += `<div class="log-entry">
+                    <span class="log-time">${escapeHtml(log.time)}</span>
+                    <span class="log-level ${log.level}">${log.level}</span>
+                    <span class="log-message">${escapeHtml(log.message)}</span>
+                </div>`;
+            });
+            body.innerHTML = html;
+            body.scrollTop = body.scrollHeight;
+        }
+
+        function setFilter(level, btn) {
+            currentFilter = level;
+            document.querySelectorAll('.log-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderLogs();
+        }
+
+        function toggleAutoRefresh() {
+            autoRefresh = !autoRefresh;
+            document.getElementById('autoRefreshBtn').classList.toggle('auto-active', autoRefresh);
+            autoRefresh ? startAutoRefresh() : stopAutoRefresh();
+        }
+
+        function startAutoRefresh() {
+            stopAutoRefresh();
+            refreshInterval = setInterval(fetchLogs, 3000);
+        }
+
+        function stopAutoRefresh() {
+            if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+        }
+
+        fetchLogs();
+        startAutoRefresh();
+    </script>
+</body>
+</html>

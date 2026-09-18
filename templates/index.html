@@ -7,602 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-deep: #090d16;
-            --bg-surface: #111827;
-            --bg-elevated: #1a2235;
-            --border: #1f2b3d;
-            --border-hover: #2a3a52;
-            --text-primary: #e8ecf4;
-            --text-secondary: #7b8ba5;
-            --text-muted: #4a5568;
-            --accent: #c4f042;
-            --accent-dim: #c4f04218;
-            --accent-mid: #c4f04240;
-            --error: #ef4444;
-            --success: #c4f042;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'Inter', system-ui, sans-serif;
-            background: var(--bg-deep);
-            color: var(--text-primary);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Header */
-        header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg-surface);
-        }
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.625rem;
-        }
-        .logo-mark {
-            width: 28px;
-            height: 28px;
-            background: var(--accent);
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .logo-mark svg { width: 16px; height: 16px; }
-        .logo-text {
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 600;
-            font-size: 1.05rem;
-            letter-spacing: -0.02em;
-        }
-        .header-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-        }
-        .nav-links { display: flex; gap: 0.25rem; }
-        .nav-link {
-            padding: 0.4rem 0.85rem;
-            border-radius: 6px;
-            font-size: 0.82rem;
-            color: var(--text-secondary);
-            text-decoration: none;
-            transition: background 0.15s, color 0.15s;
-        }
-        .nav-link:hover { background: var(--bg-elevated); color: var(--text-primary); }
-        .nav-link.active { background: var(--accent-dim); color: var(--accent); }
-        .status-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: var(--text-muted);
-        }
-        .status-dot.connected { background: var(--accent); box-shadow: 0 0 6px var(--accent-mid); }
-
-        /* Main layout */
-        .workspace {
-            display: grid;
-            grid-template-columns: 380px 1fr;
-            flex: 1;
-            min-height: 0;
-        }
-
-        /* Left panel — controls */
-        .controls {
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-        }
-        .panel-section {
-            padding: 1.25rem 1.5rem;
-            border-bottom: 1px solid var(--border);
-        }
-        .panel-label {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.7rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--text-muted);
-            margin-bottom: 0.75rem;
-        }
-
-        /* Skills */
-        .skill-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        .skill-option {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.75rem;
-            padding: 0.75rem;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: border-color 0.15s, background 0.15s;
-        }
-        .skill-option:hover {
-            border-color: var(--border-hover);
-            background: var(--bg-elevated);
-        }
-        .skill-option.selected {
-            border-color: var(--accent);
-            background: var(--accent-dim);
-        }
-        .skill-radio {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            border: 2px solid var(--border-hover);
-            flex-shrink: 0;
-            margin-top: 1px;
-            transition: border-color 0.15s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .skill-option.selected .skill-radio {
-            border-color: var(--accent);
-        }
-        .skill-radio-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--accent);
-            transform: scale(0);
-            transition: transform 0.15s;
-        }
-        .skill-option.selected .skill-radio-dot {
-            transform: scale(1);
-        }
-        .skill-info h3 {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.88rem;
-            font-weight: 600;
-            margin-bottom: 0.2rem;
-        }
-        .skill-info p {
-            font-size: 0.78rem;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        /* Upload */
-        .upload-zone {
-            border: 1px dashed var(--border-hover);
-            border-radius: 8px;
-            padding: 1.5rem 1rem;
-            text-align: center;
-            cursor: pointer;
-            transition: border-color 0.15s, background 0.15s;
-        }
-        .upload-zone:hover, .upload-zone.dragover {
-            border-color: var(--accent);
-            background: var(--accent-dim);
-        }
-        .upload-zone.has-file {
-            border-style: solid;
-            border-color: var(--accent);
-            background: var(--accent-dim);
-        }
-        .upload-zone input { display: none; }
-        .upload-icon {
-            width: 36px;
-            height: 36px;
-            margin: 0 auto 0.5rem;
-            border-radius: 8px;
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .upload-icon svg { width: 18px; height: 18px; color: var(--text-secondary); }
-        .upload-zone.has-file .upload-icon svg { color: var(--accent); }
-        .upload-text {
-            font-size: 0.82rem;
-            color: var(--text-secondary);
-        }
-        .upload-text strong { color: var(--text-primary); font-weight: 500; }
-        .file-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.375rem;
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 5px;
-            padding: 0.3rem 0.6rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.78rem;
-            color: var(--accent);
-            margin-top: 0.25rem;
-        }
-        .file-size {
-            color: var(--text-muted);
-            font-size: 0.72rem;
-            margin-top: 0.3rem;
-        }
-
-        /* Process button */
-        .panel-actions {
-            padding: 1.25rem 1.5rem;
-            margin-top: auto;
-            border-top: 1px solid var(--border);
-        }
-        .btn-process {
-            width: 100%;
-            padding: 0.7rem 1.25rem;
-            background: var(--accent);
-            color: var(--bg-deep);
-            border: none;
-            border-radius: 8px;
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.88rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: opacity 0.15s, transform 0.1s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-        .btn-process:hover { opacity: 0.9; }
-        .btn-process:active { transform: scale(0.98); }
-        .btn-process:disabled {
-            background: var(--bg-elevated);
-            color: var(--text-muted);
-            cursor: not-allowed;
-            border: 1px solid var(--border);
-        }
-        .btn-process:disabled:hover { opacity: 1; }
-        .btn-process svg { width: 16px; height: 16px; }
-
-        /* Right panel — output */
-        .output {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .output-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem 1.5rem;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg-surface);
-        }
-        .output-header .panel-label { margin-bottom: 0; }
-        .output-body {
-            flex: 1;
-            overflow-y: auto;
-            position: relative;
-        }
-
-        /* Empty state */
-        .empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: var(--text-muted);
-            padding: 2rem;
-            text-align: center;
-        }
-        .empty-state-icon {
-            width: 64px;
-            height: 64px;
-            margin-bottom: 1rem;
-            opacity: 0.3;
-        }
-        .empty-state p {
-            font-size: 0.85rem;
-            max-width: 280px;
-            line-height: 1.5;
-        }
-
-        /* Pipeline animation */
-        .pipeline-bar {
-            height: 2px;
-            background: var(--border);
-            position: relative;
-            overflow: hidden;
-            display: none;
-        }
-        .pipeline-bar.active {
-            display: block;
-        }
-        .pipeline-bar::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -40%;
-            width: 40%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, var(--accent), transparent);
-            animation: pipeline-flow 1.2s ease-in-out infinite;
-        }
-        @keyframes pipeline-flow {
-            to { left: 100%; }
-        }
-
-        /* Loading overlay */
-        .loading-state {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            gap: 1rem;
-            padding: 2rem;
-        }
-        .loading-state.visible {
-            display: flex;
-        }
-        .loading-ring {
-            width: 40px;
-            height: 40px;
-            border: 2px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.9s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-state p {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-        }
-        .loading-state .loading-sub {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-        }
-
-        /* Result content */
-        .result-content {
-            padding: 1.25rem 1.5rem;
-        }
-        .result-content .result-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.375rem;
-            padding: 0.3rem 0.65rem;
-            background: var(--accent-dim);
-            border: 1px solid var(--accent-mid);
-            border-radius: 5px;
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: var(--accent);
-            margin-bottom: 1rem;
-        }
-        .result-badge svg { width: 12px; height: 12px; }
-
-        /* Table */
-        .table-container {
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        .table-scroll {
-            max-height: 340px;
-            overflow: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.82rem;
-        }
-        th {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.72rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-secondary);
-            padding: 0.6rem 0.85rem;
-            text-align: left;
-            background: var(--bg-elevated);
-            border-bottom: 1px solid var(--border);
-            position: sticky;
-            top: 0;
-            z-index: 1;
-        }
-        td {
-            padding: 0.55rem 0.85rem;
-            border-bottom: 1px solid var(--border);
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            color: var(--text-primary);
-        }
-        tr:last-child td { border-bottom: none; }
-        tr:hover td { background: var(--bg-elevated); }
-
-        .table-footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.6rem 0.85rem;
-            border-top: 1px solid var(--border);
-            background: var(--bg-elevated);
-        }
-        .table-footer span {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-        }
-
-        /* Download */
-        .btn-download {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.375rem;
-            padding: 0.35rem 0.75rem;
-            background: transparent;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text-secondary);
-            font-family: 'Inter', sans-serif;
-            font-size: 0.78rem;
-            text-decoration: none;
-            cursor: pointer;
-            transition: border-color 0.15s, color 0.15s;
-        }
-        .btn-download:hover {
-            border-color: var(--accent);
-            color: var(--accent);
-        }
-        .btn-download svg { width: 14px; height: 14px; }
-
-        /* Text result */
-        .result-text-output {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1rem 1.25rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            line-height: 1.7;
-            white-space: pre-wrap;
-            max-height: 400px;
-            overflow-y: auto;
-            color: var(--text-primary);
-        }
-
-        /* Multi-file section */
-        .file-section-label {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.78rem;
-            color: var(--accent);
-            padding: 0.5rem 0;
-            margin-top: 1rem;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 0.75rem;
-        }
-        .file-section-label:first-of-type { margin-top: 0; }
-        .btn-download-sm {
-            display: inline-flex;
-            align-items: center;
-            padding: 0.2rem;
-            color: var(--text-muted);
-            transition: color 0.15s;
-        }
-        .btn-download-sm:hover { color: var(--accent); }
-        .btn-download-sm svg { width: 14px; height: 14px; }
-
-        /* Validation */
-        .validation-panel {
-            margin-top: 1.25rem;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        .validation-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.6rem 0.85rem;
-            background: var(--bg-elevated);
-            cursor: pointer;
-            user-select: none;
-        }
-        .validation-header span {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.78rem;
-            font-weight: 600;
-        }
-        .validation-passed { color: var(--accent); }
-        .validation-failed { color: var(--error); }
-        .validation-stats {
-            display: flex;
-            gap: 0.75rem;
-            font-size: 0.72rem;
-        }
-        .validation-stats .v-errors { color: var(--error); }
-        .validation-stats .v-warnings { color: #f59e0b; }
-        .validation-stats .v-ok { color: var(--accent); }
-        .validation-body {
-            max-height: 200px;
-            overflow-y: auto;
-            display: none;
-        }
-        .validation-body.open { display: block; }
-        .validation-issue {
-            display: grid;
-            grid-template-columns: 60px 1fr;
-            gap: 0.5rem;
-            padding: 0.45rem 0.85rem;
-            font-size: 0.78rem;
-            border-top: 1px solid var(--border);
-            align-items: start;
-        }
-        .issue-tag {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.7rem;
-            font-weight: 600;
-            padding: 0.1rem 0.35rem;
-            border-radius: 3px;
-            text-align: center;
-            text-transform: uppercase;
-        }
-        .issue-tag.error { background: #ef444425; color: var(--error); }
-        .issue-tag.warning { background: #f59e0b20; color: #f59e0b; }
-        .issue-detail { color: var(--text-secondary); line-height: 1.4; }
-        .issue-loc {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.7rem;
-            color: var(--text-muted);
-        }
-
-        /* Error */
-        .error-box {
-            padding: 0.85rem 1rem;
-            background: #ef444412;
-            border: 1px solid #ef444430;
-            border-radius: 8px;
-            color: var(--error);
-            font-size: 0.85rem;
-            line-height: 1.5;
-        }
-
-        /* Footer */
-        footer {
-            padding: 0.6rem 1.5rem;
-            border-top: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            font-size: 0.72rem;
-            color: var(--text-muted);
-        }
-        footer span { display: flex; align-items: center; gap: 0.3rem; }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .workspace {
-                grid-template-columns: 1fr;
-                grid-template-rows: auto 1fr;
-            }
-            .controls { border-right: none; border-bottom: 1px solid var(--border); }
-            .panel-actions { margin-top: 0; }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <header>
@@ -618,6 +23,7 @@
             <div class="nav-links">
                 <a href="/" class="nav-link active">Transform</a>
                 <a href="/generator" class="nav-link">Skill Generator</a>
+                <a href="#" class="nav-link" onclick="event.preventDefault(); toggleLogPanel()">Logs</a>
             </div>
             <div class="header-status">
                 <div class="status-dot connected" id="statusDot"></div>
@@ -630,13 +36,18 @@
         <!-- Left: Controls -->
         <div class="controls">
             <div class="panel-section">
-                <div class="panel-label">Skill</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div class="panel-label">Skill</div>
+                    <button class="btn-add-output" onclick="document.getElementById('skillUploadInput').click()" title="Upload skill .md file">+ Upload</button>
+                    <input type="file" id="skillUploadInput" accept=".md" style="display:none" onchange="uploadSkillFile(this)">
+                </div>
                 <div class="skill-list" id="skillsGrid"></div>
             </div>
 
             <div class="panel-section">
                 <div class="panel-label">Input</div>
                 <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                    <button class="btn-change-file" onclick="event.stopPropagation(); clearFile()" title="Change file" aria-label="Remove selected file">&times;</button>
                     <div class="upload-icon">
                         <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M9 2v10M5 6l4-4 4 4M3 13v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -651,6 +62,7 @@
                 <button class="btn-process" id="processBtn" disabled onclick="processFile()">
                     <svg viewBox="0 0 16 16" fill="none"><path d="M5 3l6 5-6 5V3z" fill="currentColor"/></svg>
                     Transform
+                    <span class="kbd-hint">Ctrl+Enter</span>
                 </button>
             </div>
         </div>
@@ -687,41 +99,148 @@
     </div>
 
     <footer>
-        <span>Qwen 2.5 Coder 3B</span>
-        <span>Localhost:1234</span>
+        <span id="footerModel">Loading...</span>
+        <span id="footerUrl"></span>
     </footer>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Log Panel -->
+    <div class="log-panel-overlay" id="logOverlay" onclick="toggleLogPanel()"></div>
+    <div class="log-panel" id="logPanel">
+        <div class="log-panel-header">
+            <h2>Logs</h2>
+            <button class="modal-close" onclick="toggleLogPanel()" aria-label="Close log panel">&times;</button>
+        </div>
+        <div class="log-panel-toolbar">
+            <button class="log-filter-btn active" onclick="setLogFilter('ALL', this)">All</button>
+            <button class="log-filter-btn" onclick="setLogFilter('INFO', this)">Info</button>
+            <button class="log-filter-btn" onclick="setLogFilter('WARNING', this)">Warn</button>
+            <button class="log-filter-btn" onclick="setLogFilter('ERROR', this)">Error</button>
+            <span class="log-panel-count" id="logCount">0</span>
+        </div>
+        <div class="log-panel-body" id="logBody"></div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal" style="width:400px;">
+            <div class="modal-header">
+                <h2 id="confirmTitle">Confirm</h2>
+                <button class="modal-close" onclick="closeConfirm()" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage" style="font-size:0.88rem;line-height:1.5;color:var(--text-secondary);"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal secondary" onclick="closeConfirm()">Cancel</button>
+                <button class="btn-modal primary" id="confirmOk" style="background:var(--error);border-color:var(--error);">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skill Editor Modal -->
+    <div class="modal-overlay" id="skillModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">Edit Skill</h2>
+                <button class="modal-close" onclick="closeSkillModal()" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <textarea id="skillEditor" spellcheck="false"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal secondary" onclick="closeSkillModal()">Cancel</button>
+                <button class="btn-modal primary" onclick="saveSkill()">Save</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         let selectedSkill = null;
         let selectedFile = null;
+        let editingSkillId = null;
 
-        fetch('/api/skills')
-            .then(r => r.json())
-            .then(skills => {
-                const grid = document.getElementById('skillsGrid');
-                skills.forEach(s => {
-                    const div = document.createElement('div');
-                    div.className = 'skill-option';
-                    div.innerHTML = `
-                        <div class="skill-radio"><div class="skill-radio-dot"></div></div>
-                        <div class="skill-info">
-                            <h3>${s.name}</h3>
-                            <p>${s.description}</p>
-                        </div>`;
-                    div.onclick = () => {
-                        document.querySelectorAll('.skill-option').forEach(el => el.classList.remove('selected'));
-                        div.classList.add('selected');
-                        selectedSkill = s.id;
-                        updateBtn();
-                    };
-                    grid.appendChild(div);
+        function escapeHtml(str) {
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        function showToast(msg, isError) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toast show' + (isError ? ' error' : '');
+            setTimeout(() => t.className = 'toast', 2500);
+        }
+
+        // --- Footer config ---
+        fetch('/api/config').then(r => r.json()).then(c => {
+            document.getElementById('footerModel').textContent = c.model;
+            document.getElementById('footerUrl').textContent = c.base_url.replace('http://', '').replace('/v1', '');
+        }).catch(() => {});
+
+        // --- Skills ---
+        function loadSkills() {
+            fetch('/api/skills')
+                .then(r => r.json())
+                .then(skills => {
+                    const grid = document.getElementById('skillsGrid');
+                    grid.innerHTML = '';
+                    skills.forEach(s => {
+                        const div = document.createElement('div');
+                        div.className = 'skill-option';
+                        div.tabIndex = 0;
+                        div.setAttribute('role', 'radio');
+                        div.setAttribute('aria-checked', s.id === selectedSkill ? 'true' : 'false');
+                        if (s.id === selectedSkill) div.classList.add('selected');
+
+                        const tagClass = s.category === 'example' ? 'example' : 'custom';
+                        const tagLabel = s.category === 'example' ? 'Example' : 'Custom';
+
+                        div.innerHTML = `
+                            <div class="skill-radio"><div class="skill-radio-dot"></div></div>
+                            <div class="skill-info">
+                                <h3>${escapeHtml(s.name)}</h3>
+                                <p>${escapeHtml(s.description)}</p>
+                                <div class="skill-meta">
+                                    <span class="skill-tag ${tagClass}">${tagLabel}</span>
+                                </div>
+                            </div>
+                            <div class="skill-actions">
+                                <button class="skill-action-btn" title="Edit" aria-label="Edit skill ${escapeHtml(s.name)}" data-skill-id="${s.id}" onclick="event.stopPropagation(); openSkillEditor('${s.id}')">
+                                    <svg viewBox="0 0 13 13" fill="none"><path d="M9.5 1.5l2 2L4 11H2V9L9.5 1.5z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                </button>
+                                <button class="skill-action-btn delete" title="Delete" aria-label="Delete skill ${escapeHtml(s.name)}" onclick="event.stopPropagation(); deleteSkill('${s.id}', '${escapeHtml(s.name)}')">
+                                    <svg viewBox="0 0 13 13" fill="none"><path d="M2 3.5h9M4.5 3.5V2.5a1 1 0 011-1h2a1 1 0 011 1v1M5 6v3.5M8 6v3.5M3.5 3.5l.5 7.5a1 1 0 001 1h3a1 1 0 001-1l.5-7.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                </button>
+                            </div>`;
+                        div.onclick = () => selectSkill(div, s.id);
+                        div.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectSkill(div, s.id); } };
+                        grid.appendChild(div);
+                    });
+                })
+                .catch(() => {
+                    document.getElementById('statusDot').classList.remove('connected');
+                    document.getElementById('statusText').textContent = 'Server unreachable';
                 });
-            })
-            .catch(() => {
-                document.getElementById('statusDot').classList.remove('connected');
-                document.getElementById('statusText').textContent = 'Server unreachable';
-            });
+        }
 
+        function selectSkill(div, id) {
+            document.querySelectorAll('.skill-option').forEach(el => {
+                el.classList.remove('selected');
+                el.setAttribute('aria-checked', 'false');
+            });
+            div.classList.add('selected');
+            div.setAttribute('aria-checked', 'true');
+            selectedSkill = id;
+            updateBtn();
+        }
+
+        loadSkills();
+
+        // --- File upload ---
         const uploadZone = document.getElementById('uploadZone');
         const fileInput = document.getElementById('fileInput');
 
@@ -742,12 +261,42 @@
         function handleFile(file) {
             selectedFile = file;
             uploadZone.classList.add('has-file');
-            uploadZone.innerHTML = `
-                <div class="upload-icon">
-                    <svg viewBox="0 0 18 18" fill="none"><path d="M9 2v10M5 6l4-4 4 4M3 13v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </div>
-                <div class="file-badge">${file.name}</div>
-                <div class="file-size">${(file.size / 1024).toFixed(1)} KB</div>`;
+            const inner = uploadZone.querySelector('.upload-icon');
+            const textEl = uploadZone.querySelector('.upload-text');
+            const existingBadge = uploadZone.querySelector('.file-badge');
+            const existingSize = uploadZone.querySelector('.file-size');
+            if (existingBadge) existingBadge.remove();
+            if (existingSize) existingSize.remove();
+            if (textEl) textEl.remove();
+
+            const badge = document.createElement('div');
+            badge.className = 'file-badge';
+            badge.textContent = file.name;
+            inner.insertAdjacentElement('afterend', badge);
+
+            const size = document.createElement('div');
+            size.className = 'file-size';
+            size.textContent = (file.size / 1024).toFixed(1) + ' KB';
+            badge.insertAdjacentElement('afterend', size);
+
+            updateBtn();
+        }
+
+        function clearFile() {
+            selectedFile = null;
+            fileInput.value = '';
+            uploadZone.classList.remove('has-file');
+            const badge = uploadZone.querySelector('.file-badge');
+            const size = uploadZone.querySelector('.file-size');
+            if (badge) badge.remove();
+            if (size) size.remove();
+            if (!uploadZone.querySelector('.upload-text')) {
+                const inner = uploadZone.querySelector('.upload-icon');
+                const p = document.createElement('p');
+                p.className = 'upload-text';
+                p.innerHTML = '<strong>Drop file</strong> or click to browse';
+                inner.insertAdjacentElement('afterend', p);
+            }
             updateBtn();
         }
 
@@ -755,8 +304,11 @@
             document.getElementById('processBtn').disabled = !(selectedSkill && selectedFile);
         }
 
+        // --- Process ---
         async function processFile() {
             const btn = document.getElementById('processBtn');
+            if (btn.disabled) return;
+
             const emptyState = document.getElementById('emptyState');
             const loadingState = document.getElementById('loadingState');
             const resultContent = document.getElementById('resultContent');
@@ -787,6 +339,7 @@
                     if (data.raw_output) {
                         resultContent.innerHTML += `<pre class="result-text-output" style="margin-top:0.75rem">${escapeHtml(data.raw_output)}</pre>`;
                     }
+                    showToast('Transform failed', true);
                 } else if (data.files) {
                     let html = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>${data.files.length} files generated</div>`;
                     data.files.forEach(f => {
@@ -798,6 +351,7 @@
                     if (data.download_zip) {
                         outputActions.innerHTML = `<a class="btn-download" href="${data.download_zip}" download><svg viewBox="0 0 14 14" fill="none"><path d="M7 2v8M4 7l3 3 3-3M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Download ZIP</a>`;
                     }
+                    showToast(`${data.files.length} files generated`);
                 } else if (data.preview) {
                     let html = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Transform complete</div>`;
                     html += renderTable(data.preview, data.row_count);
@@ -806,14 +360,17 @@
                     if (data.download) {
                         outputActions.innerHTML = `<a class="btn-download" href="${data.download}" download><svg viewBox="0 0 14 14" fill="none"><path d="M7 2v8M4 7l3 3 3-3M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Download</a>`;
                     }
+                    showToast('Transform complete');
                 } else if (data.result) {
                     resultContent.innerHTML = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Analysis complete</div><pre class="result-text-output">${escapeHtml(data.result)}</pre>`;
+                    showToast('Analysis complete');
                 }
             } catch (err) {
                 loadingState.classList.remove('visible');
                 pipelineBar.classList.remove('active');
                 resultContent.style.display = 'block';
                 resultContent.innerHTML = `<div class="error-box">Connection failed: ${escapeHtml(err.message)}</div>`;
+                showToast('Connection failed', true);
             }
 
             btn.disabled = false;
@@ -874,11 +431,166 @@
             return html;
         }
 
-        function escapeHtml(str) {
-            const d = document.createElement('div');
-            d.textContent = str;
-            return d.innerHTML;
+        // --- Skill editor ---
+        async function openSkillEditor(skillId) {
+            editingSkillId = skillId;
+            document.getElementById('modalTitle').textContent = `Edit Skill — ${skillId}`;
+            const res = await fetch(`/api/skills/${skillId}`);
+            const data = await res.json();
+            document.getElementById('skillEditor').value = data.content;
+            document.getElementById('skillModal').classList.add('open');
         }
+
+        function closeSkillModal() {
+            document.getElementById('skillModal').classList.remove('open');
+            editingSkillId = null;
+        }
+
+        async function saveSkill() {
+            if (!editingSkillId) return;
+            const content = document.getElementById('skillEditor').value;
+            const form = new FormData();
+            form.append('skill_content', content);
+            const res = await fetch(`/api/skills/${editingSkillId}`, { method: 'PUT', body: form });
+            const data = await res.json();
+            if (data.status === 'success') {
+                closeSkillModal();
+                loadSkills();
+                showToast('Skill saved');
+            }
+        }
+
+        function deleteSkill(skillId, skillName) {
+            showConfirm(
+                'Delete Skill',
+                `Are you sure you want to delete "${skillName}"? This action cannot be undone.`,
+                async () => {
+                    await fetch(`/api/skills/${skillId}`, { method: 'DELETE' });
+                    if (selectedSkill === skillId) {
+                        selectedSkill = null;
+                        updateBtn();
+                    }
+                    loadSkills();
+                    showToast('Skill deleted');
+                }
+            );
+        }
+
+        function showConfirm(title, message, onConfirm) {
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+            const okBtn = document.getElementById('confirmOk');
+            const newBtn = okBtn.cloneNode(true);
+            okBtn.parentNode.replaceChild(newBtn, okBtn);
+            newBtn.addEventListener('click', () => { closeConfirm(); onConfirm(); });
+            document.getElementById('confirmModal').classList.add('open');
+        }
+
+        function closeConfirm() {
+            document.getElementById('confirmModal').classList.remove('open');
+        }
+
+        document.getElementById('confirmModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeConfirm();
+        });
+
+        async function uploadSkillFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const form = new FormData();
+            form.append('skill_file', file);
+            const res = await fetch('/api/upload-skill', { method: 'POST', body: form });
+            const data = await res.json();
+            if (data.status === 'success') {
+                loadSkills();
+                showToast(`Skill "${file.name}" uploaded`);
+            }
+            input.value = '';
+        }
+
+        document.getElementById('skillModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeSkillModal();
+        });
+
+        // --- Log Panel (SSE) ---
+        let logAllEntries = [];
+        let logFilter = 'ALL';
+        let logPanelOpen = false;
+        let logEventSource = null;
+
+        function toggleLogPanel() {
+            logPanelOpen = !logPanelOpen;
+            document.getElementById('logPanel').classList.toggle('open', logPanelOpen);
+            document.getElementById('logOverlay').classList.toggle('open', logPanelOpen);
+            if (logPanelOpen && !logEventSource) {
+                fetchLogs();
+                connectLogStream();
+            }
+        }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/logs?limit=500');
+                const data = await res.json();
+                logAllEntries = data.logs;
+                renderLogs();
+            } catch {}
+        }
+
+        function connectLogStream() {
+            logEventSource = new EventSource('/api/logs/stream');
+            logEventSource.onmessage = (e) => {
+                const entry = JSON.parse(e.data);
+                logAllEntries.push(entry);
+                if (logAllEntries.length > 500) logAllEntries.shift();
+                renderLogs();
+            };
+            logEventSource.onerror = () => {
+                logEventSource.close();
+                logEventSource = null;
+                setTimeout(connectLogStream, 3000);
+            };
+        }
+
+        function renderLogs() {
+            const body = document.getElementById('logBody');
+            const filtered = logFilter === 'ALL'
+                ? logAllEntries
+                : logAllEntries.filter(l => l.level === logFilter);
+            document.getElementById('logCount').textContent = `${filtered.length} entries`;
+            if (!filtered.length) {
+                body.innerHTML = '<div class="log-empty">No logs yet</div>';
+                return;
+            }
+            body.innerHTML = filtered.map(l => `<div class="log-entry">
+                <span class="log-time">${escapeHtml(l.time).slice(11)}</span>
+                <span class="log-level ${l.level}">${l.level}</span>
+                <span class="log-message">${escapeHtml(l.message)}</span>
+            </div>`).join('');
+            body.scrollTop = body.scrollHeight;
+        }
+
+        function setLogFilter(level, btn) {
+            logFilter = level;
+            document.querySelectorAll('.log-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderLogs();
+        }
+
+        connectLogStream();
+
+        // --- Keyboard shortcuts ---
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (document.getElementById('skillModal').classList.contains('open')) { closeSkillModal(); return; }
+                if (document.getElementById('confirmModal').classList.contains('open')) { closeConfirm(); return; }
+                if (logPanelOpen) { toggleLogPanel(); return; }
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                processFile();
+            }
+        });
     </script>
 </body>
 </html>

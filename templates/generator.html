@@ -7,353 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-deep: #090d16;
-            --bg-surface: #111827;
-            --bg-elevated: #1a2235;
-            --border: #1f2b3d;
-            --border-hover: #2a3a52;
-            --text-primary: #e8ecf4;
-            --text-secondary: #7b8ba5;
-            --text-muted: #4a5568;
-            --accent: #c4f042;
-            --accent-dim: #c4f04218;
-            --accent-mid: #c4f04240;
-            --error: #ef4444;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', system-ui, sans-serif;
-            background: var(--bg-deep);
-            color: var(--text-primary);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg-surface);
-        }
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.625rem;
-        }
-        .logo-mark {
-            width: 28px; height: 28px;
-            background: var(--accent);
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .logo-mark svg { width: 16px; height: 16px; }
-        .logo-text {
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 600;
-            font-size: 1.05rem;
-            letter-spacing: -0.02em;
-        }
-        .nav-links { display: flex; gap: 0.25rem; }
-        .nav-link {
-            padding: 0.4rem 0.85rem;
-            border-radius: 6px;
-            font-size: 0.82rem;
-            color: var(--text-secondary);
-            text-decoration: none;
-            transition: background 0.15s, color 0.15s;
-        }
-        .nav-link:hover { background: var(--bg-elevated); color: var(--text-primary); }
-        .nav-link.active { background: var(--accent-dim); color: var(--accent); }
-
-        .workspace {
-            display: grid;
-            grid-template-columns: 380px 1fr;
-            flex: 1;
-            min-height: 0;
-        }
-
-        .controls {
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-        }
-        .panel-section {
-            padding: 1.25rem 1.5rem;
-            border-bottom: 1px solid var(--border);
-        }
-        .panel-label {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.7rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--text-muted);
-            margin-bottom: 0.75rem;
-        }
-
-        .upload-zone {
-            border: 1px dashed var(--border-hover);
-            border-radius: 8px;
-            padding: 1.25rem 1rem;
-            text-align: center;
-            cursor: pointer;
-            transition: border-color 0.15s, background 0.15s;
-        }
-        .upload-zone:hover { border-color: var(--accent); background: var(--accent-dim); }
-        .upload-zone.has-file {
-            border-style: solid;
-            border-color: var(--accent);
-            background: var(--accent-dim);
-        }
-        .upload-zone input { display: none; }
-        .upload-icon {
-            width: 32px; height: 32px;
-            margin: 0 auto 0.4rem;
-            border-radius: 6px;
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .upload-icon svg { width: 16px; height: 16px; color: var(--text-secondary); }
-        .upload-zone.has-file .upload-icon svg { color: var(--accent); }
-        .upload-text { font-size: 0.78rem; color: var(--text-secondary); }
-        .upload-text strong { color: var(--text-primary); font-weight: 500; }
-        .file-badge {
-            display: inline-flex;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.75rem;
-            color: var(--accent);
-            margin-top: 0.2rem;
-        }
-
-        .btn-add-output {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            padding: 0.2rem 0.6rem;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            cursor: pointer;
-            font-family: 'Space Grotesk', sans-serif;
-        }
-        .btn-add-output:hover { border-color: var(--accent); color: var(--accent); }
-        .output-slot {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-        .output-slot .upload-zone { flex: 1; }
-        .btn-remove-slot {
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            font-size: 1.1rem;
-            padding: 0.25rem;
-            border-radius: 4px;
-            line-height: 1;
-        }
-        .btn-remove-slot:hover { color: var(--error); }
-        .input-field {
-            width: 100%;
-            padding: 0.55rem 0.75rem;
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-family: 'Inter', sans-serif;
-            font-size: 0.85rem;
-            outline: none;
-            transition: border-color 0.15s;
-        }
-        .input-field:focus { border-color: var(--accent); }
-        .input-field::placeholder { color: var(--text-muted); }
-
-        .panel-actions {
-            padding: 1.25rem 1.5rem;
-            margin-top: auto;
-            border-top: 1px solid var(--border);
-        }
-        .btn {
-            width: 100%;
-            padding: 0.7rem 1.25rem;
-            background: var(--accent);
-            color: var(--bg-deep);
-            border: none;
-            border-radius: 8px;
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.88rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: opacity 0.15s;
-        }
-        .btn:hover { opacity: 0.9; }
-        .btn:disabled { background: var(--bg-elevated); color: var(--text-muted); cursor: not-allowed; border: 1px solid var(--border); }
-
-        /* Output panel */
-        .output {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .output-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem 1.5rem;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg-surface);
-        }
-        .output-header .panel-label { margin-bottom: 0; }
-        .output-body {
-            flex: 1;
-            overflow-y: auto;
-            position: relative;
-        }
-
-        .empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: var(--text-muted);
-            padding: 2rem;
-            text-align: center;
-        }
-        .empty-state p { font-size: 0.85rem; max-width: 300px; line-height: 1.5; }
-
-        .loading-state {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            gap: 1rem;
-        }
-        .loading-state.visible { display: flex; }
-        .loading-ring {
-            width: 40px; height: 40px;
-            border: 2px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.9s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-state p { font-size: 0.85rem; color: var(--text-secondary); }
-
-        .pipeline-bar {
-            height: 2px;
-            background: var(--border);
-            position: relative;
-            overflow: hidden;
-            display: none;
-        }
-        .pipeline-bar.active { display: block; }
-        .pipeline-bar::after {
-            content: '';
-            position: absolute;
-            top: 0; left: -40%;
-            width: 40%; height: 100%;
-            background: linear-gradient(90deg, transparent, var(--accent), transparent);
-            animation: pipeline-flow 1.2s ease-in-out infinite;
-        }
-        @keyframes pipeline-flow { to { left: 100%; } }
-
-        /* Skill editor */
-        .skill-editor-wrap {
-            display: none;
-            flex-direction: column;
-            height: 100%;
-        }
-        .skill-editor-wrap.visible { display: flex; }
-        .skill-editor {
-            flex: 1;
-            width: 100%;
-            background: var(--bg-surface);
-            color: var(--text-primary);
-            border: none;
-            padding: 1.25rem 1.5rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            line-height: 1.7;
-            resize: none;
-            outline: none;
-        }
-        .editor-actions {
-            display: flex;
-            gap: 0.75rem;
-            padding: 0.85rem 1.5rem;
-            border-top: 1px solid var(--border);
-            background: var(--bg-surface);
-        }
-        .btn-save {
-            padding: 0.55rem 1.25rem;
-            background: var(--accent);
-            color: var(--bg-deep);
-            border: none;
-            border-radius: 6px;
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.82rem;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .btn-save:hover { opacity: 0.9; }
-        .btn-secondary {
-            padding: 0.55rem 1.25rem;
-            background: transparent;
-            color: var(--text-secondary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.82rem;
-            font-weight: 500;
-            cursor: pointer;
-        }
-        .btn-secondary:hover { border-color: var(--border-hover); color: var(--text-primary); }
-
-        .toast {
-            position: fixed;
-            bottom: 1.5rem;
-            right: 1.5rem;
-            padding: 0.65rem 1.25rem;
-            background: var(--bg-elevated);
-            border: 1px solid var(--accent);
-            border-radius: 8px;
-            color: var(--accent);
-            font-size: 0.85rem;
-            font-weight: 500;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: all 0.3s;
-            pointer-events: none;
-        }
-        .toast.show { opacity: 1; transform: translateY(0); }
-
-        footer {
-            padding: 0.6rem 1.5rem;
-            border-top: 1px solid var(--border);
-            font-size: 0.72rem;
-            color: var(--text-muted);
-        }
-
-        @media (max-width: 768px) {
-            .workspace { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-            .controls { border-right: none; border-bottom: 1px solid var(--border); }
-            .panel-actions { margin-top: 0; }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <header>
@@ -363,9 +17,16 @@
             </div>
             <span class="logo-text">SkillForge</span>
         </div>
-        <div class="nav-links">
-            <a href="/" class="nav-link">Transform</a>
-            <a href="/generator" class="nav-link active">Skill Generator</a>
+        <div style="display:flex;align-items:center;gap:1.5rem;">
+            <div class="nav-links">
+                <a href="/" class="nav-link">Transform</a>
+                <a href="/generator" class="nav-link active">Skill Generator</a>
+                <a href="#" class="nav-link" onclick="event.preventDefault(); toggleLogPanel()">Logs</a>
+            </div>
+            <div class="header-status">
+                <div class="status-dot connected" id="statusDot"></div>
+                <span id="statusText">LM Studio connected</span>
+            </div>
         </div>
     </header>
 
@@ -379,6 +40,7 @@
             <div class="panel-section">
                 <div class="panel-label">Input File (Source)</div>
                 <div class="upload-zone" id="inputZone" onclick="document.getElementById('inputFile').click()">
+                    <button class="btn-change-file" onclick="event.stopPropagation(); clearInput()" title="Change file" aria-label="Remove selected file">&times;</button>
                     <div class="upload-icon">
                         <svg viewBox="0 0 18 18" fill="none"><path d="M9 2v10M5 6l4-4 4 4M3 13v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
@@ -396,7 +58,10 @@
             </div>
 
             <div class="panel-actions">
-                <button class="btn" id="generateBtn" disabled onclick="generateSkill()">Generate Skill</button>
+                <button class="btn" id="generateBtn" disabled onclick="generateSkill()">
+                    Generate Skill
+                    <span class="kbd-hint">Ctrl+Enter</span>
+                </button>
             </div>
         </div>
 
@@ -426,13 +91,53 @@
 
     <div class="toast" id="toast"></div>
 
-    <footer>Skill Generator — create transform skills by example</footer>
+    <footer>
+        <span id="footerModel">Loading...</span>
+        <span id="footerUrl"></span>
+    </footer>
+
+    <!-- Log Panel -->
+    <div class="log-panel-overlay" id="logOverlay" onclick="toggleLogPanel()"></div>
+    <div class="log-panel" id="logPanel">
+        <div class="log-panel-header">
+            <h2>Logs</h2>
+            <button class="modal-close" onclick="toggleLogPanel()" aria-label="Close log panel">&times;</button>
+        </div>
+        <div class="log-panel-toolbar">
+            <button class="log-filter-btn active" onclick="setLogFilter('ALL', this)">All</button>
+            <button class="log-filter-btn" onclick="setLogFilter('INFO', this)">Info</button>
+            <button class="log-filter-btn" onclick="setLogFilter('WARNING', this)">Warn</button>
+            <button class="log-filter-btn" onclick="setLogFilter('ERROR', this)">Error</button>
+            <span class="log-panel-count" id="logCount">0</span>
+        </div>
+        <div class="log-panel-body" id="logBody"></div>
+    </div>
 
     <script>
         let inputFileData = null;
         let outputFiles = [];
         let slotCounter = 0;
 
+        function escapeHtml(str) {
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        function showToast(msg, isError) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toast show' + (isError ? ' error' : '');
+            setTimeout(() => t.className = 'toast', 2500);
+        }
+
+        // --- Footer config ---
+        fetch('/api/config').then(r => r.json()).then(c => {
+            document.getElementById('footerModel').textContent = c.model;
+            document.getElementById('footerUrl').textContent = c.base_url.replace('http://', '').replace('/v1', '');
+        }).catch(() => {});
+
+        // --- Upload helpers ---
         function setupZone(zone, fileInput, onFile) {
             fileInput.addEventListener('change', (e) => {
                 if (e.target.files.length) onFile(e.target.files[0], zone);
@@ -447,17 +152,40 @@
 
         function markUploaded(file, zone) {
             zone.classList.add('has-file');
-            zone.innerHTML = `
-                <div class="upload-icon"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2v10M5 6l4-4 4 4M3 13v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-                <div class="file-badge">${file.name}</div>`;
+            const inner = zone.querySelector('.upload-icon');
+            const textEl = zone.querySelector('.upload-text');
+            const existingBadge = zone.querySelector('.file-badge');
+            if (existingBadge) existingBadge.remove();
+            if (textEl) textEl.remove();
+            const badge = document.createElement('div');
+            badge.className = 'file-badge';
+            badge.textContent = file.name;
+            inner.insertAdjacentElement('afterend', badge);
         }
 
-        // Input file setup
+        // Input file
         setupZone(
             document.getElementById('inputZone'),
             document.getElementById('inputFile'),
             (file, zone) => { inputFileData = file; markUploaded(file, zone); updateGenerateBtn(); }
         );
+
+        function clearInput() {
+            inputFileData = null;
+            const zone = document.getElementById('inputZone');
+            zone.classList.remove('has-file');
+            const badge = zone.querySelector('.file-badge');
+            if (badge) badge.remove();
+            if (!zone.querySelector('.upload-text')) {
+                const inner = zone.querySelector('.upload-icon');
+                const p = document.createElement('p');
+                p.className = 'upload-text';
+                p.innerHTML = '<strong>Source CSV</strong>';
+                inner.insertAdjacentElement('afterend', p);
+            }
+            document.getElementById('inputFile').value = '';
+            updateGenerateBtn();
+        }
 
         // Output slots
         function addOutputSlot() {
@@ -472,7 +200,7 @@
                     <p class="upload-text"><strong>Target CSV</strong></p>
                     <input type="file" id="ofile_${id}" accept=".csv,.txt,.json" style="display:none">
                 </div>
-                <button class="btn-remove-slot" onclick="removeOutputSlot(${id})" title="Remove">&times;</button>`;
+                <button class="btn-remove-slot" onclick="removeOutputSlot(${id})" title="Remove" aria-label="Remove output file">&times;</button>`;
             container.appendChild(slot);
 
             const zone = document.getElementById(`ozone_${id}`);
@@ -490,7 +218,6 @@
             updateGenerateBtn();
         }
 
-        // Start with one output slot
         addOutputSlot();
 
         function getOutputFiles() {
@@ -503,6 +230,8 @@
 
         async function generateSkill() {
             const btn = document.getElementById('generateBtn');
+            if (btn.disabled) return;
+
             const loading = document.getElementById('loadingState');
             const empty = document.getElementById('emptyState');
             const editor = document.getElementById('editorWrap');
@@ -529,15 +258,18 @@
                 if (data.skill_content) {
                     document.getElementById('skillEditor').value = data.skill_content;
                     editor.classList.add('visible');
+                    showToast('Skill generated');
                 } else {
                     empty.style.display = 'flex';
                     empty.querySelector('p').textContent = data.error || 'Generation failed';
+                    showToast('Generation failed', true);
                 }
             } catch (err) {
                 loading.classList.remove('visible');
                 pipeline.classList.remove('active');
                 empty.style.display = 'flex';
                 empty.querySelector('p').textContent = 'Connection failed: ' + err.message;
+                showToast('Connection failed', true);
             }
 
             btn.disabled = false;
@@ -558,10 +290,10 @@
                 if (data.status === 'success') {
                     showToast(`Skill saved as ${data.filename}`);
                 } else {
-                    showToast(data.error || 'Save failed');
+                    showToast(data.error || 'Save failed', true);
                 }
             } catch (err) {
-                showToast('Save failed: ' + err.message);
+                showToast('Save failed: ' + err.message, true);
             }
         }
 
@@ -570,12 +302,83 @@
             navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
         }
 
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 2500);
+        // --- Log Panel (SSE) ---
+        let logAllEntries = [];
+        let logFilter = 'ALL';
+        let logPanelOpen = false;
+        let logEventSource = null;
+
+        function toggleLogPanel() {
+            logPanelOpen = !logPanelOpen;
+            document.getElementById('logPanel').classList.toggle('open', logPanelOpen);
+            document.getElementById('logOverlay').classList.toggle('open', logPanelOpen);
+            if (logPanelOpen && !logEventSource) {
+                fetchLogs();
+                connectLogStream();
+            }
         }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/logs?limit=500');
+                const data = await res.json();
+                logAllEntries = data.logs;
+                renderLogs();
+            } catch {}
+        }
+
+        function connectLogStream() {
+            logEventSource = new EventSource('/api/logs/stream');
+            logEventSource.onmessage = (e) => {
+                const entry = JSON.parse(e.data);
+                logAllEntries.push(entry);
+                if (logAllEntries.length > 500) logAllEntries.shift();
+                renderLogs();
+            };
+            logEventSource.onerror = () => {
+                logEventSource.close();
+                logEventSource = null;
+                setTimeout(connectLogStream, 3000);
+            };
+        }
+
+        function renderLogs() {
+            const body = document.getElementById('logBody');
+            const filtered = logFilter === 'ALL'
+                ? logAllEntries
+                : logAllEntries.filter(l => l.level === logFilter);
+            document.getElementById('logCount').textContent = `${filtered.length} entries`;
+            if (!filtered.length) {
+                body.innerHTML = '<div class="log-empty">No logs yet</div>';
+                return;
+            }
+            body.innerHTML = filtered.map(l => `<div class="log-entry">
+                <span class="log-time">${escapeHtml(l.time).slice(11)}</span>
+                <span class="log-level ${l.level}">${l.level}</span>
+                <span class="log-message">${escapeHtml(l.message)}</span>
+            </div>`).join('');
+            body.scrollTop = body.scrollHeight;
+        }
+
+        function setLogFilter(level, btn) {
+            logFilter = level;
+            document.querySelectorAll('.log-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderLogs();
+        }
+
+        connectLogStream();
+
+        // --- Keyboard shortcuts ---
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (logPanelOpen) { toggleLogPanel(); return; }
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                generateSkill();
+            }
+        });
     </script>
 </body>
 </html>

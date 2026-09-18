@@ -1,19 +1,68 @@
+import asyncio
+import json
+import logging
 import os
 import csv
 import io
 import uuid
 import zipfile
+from collections import deque
 from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+LOG_BUFFER_SIZE = 500
+log_buffer: deque[dict] = deque(maxlen=LOG_BUFFER_SIZE)
+log_subscribers: list[asyncio.Queue] = []
+
+
+class BufferHandler(logging.Handler):
+    def emit(self, record):
+        entry = {
+            "time": self.format(record),
+            "level": record.levelname,
+            "message": record.getMessage(),
+        }
+        log_buffer.append(entry)
+        for q in log_subscribers[:]:
+            try:
+                q.put_nowait(entry)
+            except asyncio.QueueFull:
+                pass
+
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("skillforge")
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+
+buffer_handler = BufferHandler()
+buffer_handler.setLevel(logging.DEBUG)
+buffer_handler.setFormatter(logging.Formatter("%(asctime)s", datefmt="%Y-%m-%d %H:%M:%S"))
+logger.addHandler(buffer_handler)
 
 from fastapi import FastAPI, UploadFile, Form
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import StreamingResponse
 
 from openai import OpenAI
 from services.skill_loader import load_skills, Skill
 from services.validator import validate_csv_sections
 
-UPLOAD_DIR = "uploads"
-OUTPUT_DIR = "outputs"
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://127.0.0.1:1234/v1")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "lm-studio")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5-coder-3b-instruct")
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
+SKILLS_DIR = os.getenv("SKILLS_DIR", "skills")
+OUTPUT_PREFIX = os.getenv("OUTPUT_PREFIX", "skillforge")
+OUTPUT_SUFFIX = os.getenv("OUTPUT_SUFFIX", "")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -27,12 +76,15 @@ SPLIT_MARKERS = ["---SPLIT---", "===SPLIT===", "=== Header ===", "=== Lines ==="
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global skills, llm_client
-    skills = load_skills("skills")
-    llm_client = OpenAI(base_url="http://127.0.0.1:1234/v1", api_key="lm-studio")
+    skills = load_skills(SKILLS_DIR)
+    logger.info("Loaded %d skills", len(skills))
+    llm_client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+    logger.info("LLM client connected to %s", LLM_BASE_URL)
     yield
 
 
 app = FastAPI(title="SkillForge", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +103,21 @@ async def generator():
         return f.read()
 
 
+@app.get("/logs", response_class=HTMLResponse)
+async def logs_page():
+    with open("templates/logs.html", "r", encoding="utf-8") as f:
+        return f.read()
+
+
+# ---------------------------------------------------------------------------
+# API — Config
+# ---------------------------------------------------------------------------
+
+@app.get("/api/config")
+async def get_config():
+    return {"model": LLM_MODEL, "base_url": LLM_BASE_URL}
+
+
 # ---------------------------------------------------------------------------
 # API — Skills
 # ---------------------------------------------------------------------------
@@ -58,16 +125,66 @@ async def generator():
 @app.get("/api/skills")
 async def list_skills():
     return [
-        {"id": s.id, "name": s.name, "description": s.description}
+        {"id": s.id, "name": s.name, "description": s.description, "category": s.category}
         for s in skills
         if not s.id.startswith("_")
     ]
 
 
+@app.get("/api/skills/{skill_id}")
+async def get_skill(skill_id: str):
+    skill = next((s for s in skills if s.id == skill_id), None)
+    if not skill:
+        return JSONResponse({"error": "Skill not found"}, status_code=404)
+
+    filepath = os.path.join(SKILLS_DIR, f"{skill_id}.md")
+    with open(filepath, "r", encoding="utf-8") as f:
+        raw_content = f.read()
+
+    return {
+        "id": skill.id,
+        "name": skill.name,
+        "description": skill.description,
+        "category": skill.category,
+        "content": raw_content,
+    }
+
+
+@app.put("/api/skills/{skill_id}")
+async def update_skill(skill_id: str, skill_content: str = Form(...)):
+    filepath = os.path.join(SKILLS_DIR, f"{skill_id}.md")
+    if not os.path.exists(filepath):
+        return JSONResponse({"error": "Skill not found"}, status_code=404)
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(skill_content)
+
+    global skills
+    skills = load_skills(SKILLS_DIR)
+    logger.info("Skill updated: %s", skill_id)
+
+    return {"status": "success", "skill_id": skill_id}
+
+
+@app.delete("/api/skills/{skill_id}")
+async def delete_skill(skill_id: str):
+    filepath = os.path.join(SKILLS_DIR, f"{skill_id}.md")
+    if not os.path.exists(filepath):
+        return JSONResponse({"error": "Skill not found"}, status_code=404)
+
+    os.remove(filepath)
+
+    global skills
+    skills = load_skills(SKILLS_DIR)
+    logger.info("Skill deleted: %s", skill_id)
+
+    return {"status": "success", "skill_id": skill_id}
+
+
 @app.post("/api/reload-skills")
 async def reload_skills():
     global skills
-    skills = load_skills("skills")
+    skills = load_skills(SKILLS_DIR)
     return {"status": "ok", "count": len(skills)}
 
 
@@ -87,21 +204,29 @@ async def process_file(file: UploadFile, skill_id: str = Form(...)):
         f.write(await file.read())
 
     file_content = _read_file_content(input_path)
-    llm_output = _call_llm(skill.instructions, file_content)
 
-    detected_marker = _detect_split_marker(llm_output)
-    if detected_marker:
-        return _handle_multi_output(llm_output, detected_marker, job_id, skill.id)
-    return _handle_single_output(llm_output, job_id, skill.id)
+    try:
+        logger.info("[%s] Processing with skill '%s'", job_id, skill_id)
+        llm_output = await _call_llm(skill.instructions, file_content)
+        logger.info("[%s] LLM returned %d chars", job_id, len(llm_output))
+
+        detected_marker = _detect_split_marker(llm_output)
+        if detected_marker:
+            logger.info("[%s] Multi-output detected (marker: %s)", job_id, detected_marker)
+            return _handle_multi_output(llm_output, detected_marker, job_id, skill)
+        return _handle_single_output(llm_output, job_id, skill)
+    except Exception as e:
+        logger.error("[%s] Process failed: %s", job_id, str(e))
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # ---------------------------------------------------------------------------
 # LLM — Send skill instructions + file content to the model
 # ---------------------------------------------------------------------------
 
-def _call_llm(instructions: str, file_content: str) -> str:
+def _call_llm_sync(instructions: str, file_content: str) -> str:
     response = llm_client.chat.completions.create(
-        model="qwen2.5-coder-3b-instruct",
+        model=LLM_MODEL,
         messages=[
             {"role": "system", "content": instructions},
             {"role": "user", "content": f"=== File Content ===\n{file_content}"},
@@ -109,6 +234,10 @@ def _call_llm(instructions: str, file_content: str) -> str:
         temperature=0.0,
     )
     return response.choices[0].message.content.strip()
+
+
+async def _call_llm(instructions: str, file_content: str) -> str:
+    return await asyncio.to_thread(_call_llm_sync, instructions, file_content)
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +295,16 @@ def _strip_code_fences(text: str) -> str:
     return "\n".join(lines)
 
 
+def _deduplicate_csv_headers(text: str) -> str:
+    """Remove repeated header rows from CSV output (common with small LLMs)."""
+    lines = text.strip().splitlines()
+    if len(lines) < 2:
+        return text
+    header = lines[0]
+    cleaned = [header] + [line for line in lines[1:] if line.strip() and line.strip() != header]
+    return "\n".join(cleaned)
+
+
 def _looks_like_csv(text: str) -> bool:
     lines = text.strip().splitlines()
     if len(lines) < 2:
@@ -177,17 +316,17 @@ def _looks_like_csv(text: str) -> bool:
 # Output Handlers
 # ---------------------------------------------------------------------------
 
-def _handle_single_output(llm_output: str, job_id: str, skill_id: str) -> dict:
+def _handle_single_output(llm_output: str, job_id: str, skill: Skill) -> dict:
     """Save CSV output with validation, or return plain text as-is."""
     if _looks_like_csv(llm_output):
-        filename = f"{job_id}_output.csv"
+        filename = _generate_file_names(1, job_id, skill.output_files)[0]
         filepath = os.path.join(OUTPUT_DIR, filename)
         _save_csv(llm_output, filepath)
         validation = validate_csv_sections([{"name": filename, "content": llm_output}])
 
         return {
             "status": "success",
-            "skill": skill_id,
+            "skill": skill.id,
             "preview": _csv_preview(llm_output),
             "row_count": _count_csv_rows(llm_output),
             "download": f"/api/download/{filename}",
@@ -196,20 +335,20 @@ def _handle_single_output(llm_output: str, job_id: str, skill_id: str) -> dict:
 
     return {
         "status": "success",
-        "skill": skill_id,
+        "skill": skill.id,
         "result": llm_output,
     }
 
 
-def _handle_multi_output(llm_output: str, marker: str, job_id: str, skill_id: str) -> dict:
+def _handle_multi_output(llm_output: str, marker: str, job_id: str, skill: Skill) -> dict:
     """Split output by marker, save each section as CSV, bundle into ZIP."""
     sections = [s.strip() for s in llm_output.split(marker) if s.strip()]
-    file_names = _generate_file_names(len(sections), job_id)
+    file_names = _generate_file_names(len(sections), job_id, skill.output_files)
     saved_files = []
     previews = []
 
     for section, name in zip(sections, file_names):
-        clean = _strip_code_fences(section)
+        clean = _deduplicate_csv_headers(_strip_code_fences(section))
         filepath = os.path.join(OUTPUT_DIR, name)
         _save_csv(clean, filepath)
         saved_files.append(filepath)
@@ -220,7 +359,7 @@ def _handle_multi_output(llm_output: str, marker: str, job_id: str, skill_id: st
             "download": f"/api/download/{name}",
         })
 
-    zip_name = f"{job_id}_bundle.zip"
+    zip_name = f"{OUTPUT_PREFIX}_{job_id}_bundle.zip"
     zip_path = os.path.join(OUTPUT_DIR, zip_name)
     _create_zip(saved_files, zip_path)
 
@@ -232,17 +371,24 @@ def _handle_multi_output(llm_output: str, marker: str, job_id: str, skill_id: st
 
     return {
         "status": "success",
-        "skill": skill_id,
+        "skill": skill.id,
         "files": previews,
         "download_zip": f"/api/download/{zip_name}",
         "validation": validation.to_dict(),
     }
 
 
-def _generate_file_names(count: int, job_id: str) -> list[str]:
+def _generate_file_names(count: int, job_id: str, skill_output_files: list[str] | None = None) -> list[str]:
+    suffix = f"_{OUTPUT_SUFFIX}" if OUTPUT_SUFFIX else ""
+
+    if skill_output_files and len(skill_output_files) == count:
+        return [f"{OUTPUT_PREFIX}_{job_id}_{name}{suffix}.csv" for name in skill_output_files]
+
+    if count == 1:
+        return [f"{OUTPUT_PREFIX}_{job_id}_output{suffix}.csv"]
     if count == 2:
-        return [f"{job_id}_header.csv", f"{job_id}_lines.csv"]
-    return [f"{job_id}_part{i+1}.csv" for i in range(count)]
+        return [f"{OUTPUT_PREFIX}_{job_id}_header{suffix}.csv", f"{OUTPUT_PREFIX}_{job_id}_lines{suffix}.csv"]
+    return [f"{OUTPUT_PREFIX}_{job_id}_part{i+1}{suffix}.csv" for i in range(count)]
 
 
 # ---------------------------------------------------------------------------
@@ -251,14 +397,15 @@ def _generate_file_names(count: int, job_id: str) -> list[str]:
 
 SKILL_GEN_PROMPT = """You are a skill template generator. You will receive a source CSV (input) and one or more target CSVs (desired output).
 
-Analyze the mapping between input and output, then generate a skill.md file that describes the transformation rules.
+Analyze the mapping between input and output, then generate a skill.md file.
 
-Your output MUST follow this EXACT format (including the --- frontmatter delimiters):
+Your output MUST follow this EXACT format:
 
 ---
 name: (short descriptive name)
 description: (one line description)
 input_types: [".csv"]
+output_files: ["file1_name", "file2_name"]
 ---
 
 # (Skill Name)
@@ -267,26 +414,47 @@ You are a data transformation expert. Your job is to read the source CSV and pro
 
 ## Source Schema
 
-(table describing each input column with | Source Column | Type | Description |)
+| Source Column | Type | Description |
+|---|---|---|
+(one row per input column)
 
 ## Mapping Rules
 
-(table describing how each target column maps from source with | Target Column | Source | Transformation |)
+If multiple output files, create a separate mapping section for each:
+
+### File 1: (name)
+| Target Column | Source | Transformation |
+|---|---|---|
+(one row per target column)
+
+### File 2: (name)
+(same format)
 
 ## Special Rules
 
-(any special rules like 1 row to multiple rows, date format changes, default values, etc.)
+(row multiplication rules, date format changes, default values, etc.)
 
 ## Output Format
 
-(specify exact output format. Use ---SPLIT--- between sections if multiple output files are needed)
+CRITICAL RULES FOR THE LLM:
+- Output ONLY raw CSV data. No markdown, no explanations, no code fences, no comments.
+- Each CSV section has the header row ONLY ONCE at the top. NEVER repeat header rows.
+- Process ALL input rows completely.
+(if multiple output files):
+- Separate files with ---SPLIT--- on its own line.
+- Output all rows for file 1, then ---SPLIT---, then all rows for file 2.
 
-IMPORTANT:
-- Analyze EVERY column in the input and output carefully
-- Detect date format changes, default values, concatenations, lookups
-- If the output has more rows than input, describe the row multiplication rule
-- If there are multiple output files, use ---SPLIT--- separator format
-- Be precise about column names, use exact names from the files
+Example (showing first 2 rows only):
+(paste 2 example rows from each target file, with ---SPLIT--- between them)
+
+RULES FOR GENERATING THIS SKILL:
+- Analyze EVERY column in both input and output carefully
+- Detect date format changes (e.g. YYYY/MM/DD to YYYY-MM-DD)
+- Detect default/constant values, concatenations, lookups
+- If output has more rows than input, describe the row multiplication rule
+- Use exact column names from the files
+- Always include a concrete example in the Output Format section
+- The output_files frontmatter must list short names for each output file
 - Output ONLY the skill.md content, nothing else"""
 
 
@@ -315,18 +483,14 @@ async def generate_skill(
     if skill_name:
         user_message += f"\n\nSuggested skill name: {skill_name}"
 
-    response = llm_client.chat.completions.create(
-        model="qwen2.5-coder-3b-instruct",
-        messages=[
-            {"role": "system", "content": SKILL_GEN_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
-        temperature=0.0,
-    )
+    logger.info("[%s] Generating skill from %d output file(s)", job_id, len(output_files))
+
+    skill_content = await _call_llm(SKILL_GEN_PROMPT, user_message)
+    logger.info("[%s] Skill generated (%d chars)", job_id, len(skill_content))
 
     return {
         "status": "success",
-        "skill_content": response.choices[0].message.content.strip(),
+        "skill_content": skill_content,
     }
 
 
@@ -349,13 +513,14 @@ async def upload_skill(
         filename += ".md"
 
     safe_name = "".join(c for c in filename if c.isalnum() or c in "-_.")
-    skill_path = os.path.join("skills", safe_name)
+    skill_path = os.path.join(SKILLS_DIR, safe_name)
 
     with open(skill_path, "w", encoding="utf-8") as f:
         f.write(content)
 
     global skills
-    skills = load_skills("skills")
+    skills = load_skills(SKILLS_DIR)
+    logger.info("Skill saved: %s (total: %d)", safe_name, len(skills))
 
     return {
         "status": "success",
@@ -376,3 +541,31 @@ async def download_file(filename: str):
 
     media = "application/zip" if filename.endswith(".zip") else "text/csv"
     return FileResponse(path, filename=filename, media_type=media)
+
+
+# ---------------------------------------------------------------------------
+# API — Logs
+# ---------------------------------------------------------------------------
+
+@app.get("/api/logs")
+async def get_logs(limit: int = 100):
+    entries = list(log_buffer)[-limit:]
+    return {"logs": entries}
+
+
+@app.get("/api/logs/stream")
+async def stream_logs():
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    log_subscribers.append(queue)
+
+    async def event_generator():
+        try:
+            while True:
+                entry = await queue.get()
+                yield f"data: {json.dumps(entry)}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            log_subscribers.remove(queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
