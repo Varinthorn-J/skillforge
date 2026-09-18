@@ -2,7 +2,7 @@
 
 Local LLM-powered data transformation framework. Define transformation logic in **skill.md** files (the "brain"), while Python handles only common I/O (the "hands"). Upload input and output examples to auto-generate skills, then transform data through a visual web UI — all processing stays on your machine.
 
-![SkillForge Transform](docs/screenshot.png)
+![SkillForge Transform](docs/Screenshot.png)
 
 ## How It Works
 
