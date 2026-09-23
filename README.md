@@ -242,6 +242,14 @@ skillforge/
 | `GET` | `/api/logs/stream` | SSE real-time log stream |
 | `GET` | `/api/download/{filename}` | Download output file |
 
+## Roadmap
+
+Planned features (see [docs/ROADMAP.md](docs/ROADMAP.md) for full proposals):
+
+- **Evaluation set** — measure per-column transform accuracy against ground truth using LangSmith datasets
+- **RAG skill selection** — suggest the right skill from an uploaded file via local embeddings
+- **Persistent job store** — move the job store from RAM to SQLite/Redis so results survive restarts
+
 ## Tech Stack
 
 - **Backend**: Python, FastAPI, Uvicorn
