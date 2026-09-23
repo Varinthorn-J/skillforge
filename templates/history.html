@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History — SkillForge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <div class="logo-mark">
+                <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 5h4v2H2zm0 4h4v2H2zm8-4h4v2h-4zm0 4h4v2h-4zM7 7l2 1-2 1V7z" fill="#090d16"/>
+                </svg>
+            </div>
+            <span class="logo-text">SkillForge</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1.5rem;">
+            <div class="nav-links">
+                <a href="/" class="nav-link">Transform</a>
+                <a href="/generator" class="nav-link">Skill Generator</a>
+                <a href="/history" class="nav-link active">History</a>
+                <a href="/logs" class="nav-link">Logs</a>
+            </div>
+            <div class="header-status">
+                <div class="status-dot connected" id="statusDot"></div>
+                <span id="statusText">LM Studio connected</span>
+            </div>
+        </div>
+    </header>
+
+    <div style="max-width:920px;margin:0 auto;padding:2rem 1.5rem;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+            <div>
+                <div class="panel-label" style="margin-bottom:0.25rem;">Transform History</div>
+                <div style="color:var(--text-secondary);font-size:0.85rem;">Past outputs saved on disk — download any of them anytime.</div>
+            </div>
+            <button class="btn-refresh" onclick="loadHistory()" title="Refresh">↻ Refresh</button>
+        </div>
+        <div id="historyList"></div>
+    </div>
+
+    <script>
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+        function fmtSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+        }
+
+        const dlIcon = `<svg viewBox="0 0 14 14" fill="none"><path d="M7 2v8M4 7l3 3 3-3M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+        async function loadHistory() {
+            const list = document.getElementById('historyList');
+            list.innerHTML = '<div class="history-empty">Loading…</div>';
+            try {
+                const res = await fetch('/api/history');
+                const items = await res.json();
+                if (!items.length) {
+                    list.innerHTML = '<div class="history-empty">No transforms yet. Run one from the Transform page — it will appear here.</div>';
+                    return;
+                }
+                list.innerHTML = items.map(renderCard).join('');
+            } catch (err) {
+                list.innerHTML = `<div class="history-empty">Failed to load history: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
+        function renderCard(job) {
+            const filesHtml = job.files.map(f => `
+                <a class="history-file" href="${f.download}" download>
+                    <span class="history-file-name">${escapeHtml(f.filename)}</span>
+                    <span class="history-file-size">${fmtSize(f.size)}</span>
+                    ${dlIcon}
+                </a>`).join('');
+            const zipHtml = job.zip
+                ? `<a class="btn-download" href="${job.zip.download}" download>${dlIcon}Download ZIP</a>`
+                : '';
+            return `
+                <div class="history-card">
+                    <div class="history-card-head">
+                        <div>
+                            <span class="history-job">${escapeHtml(job.job_id)}</span>
+                            <span class="history-count">${job.file_count} file${job.file_count !== 1 ? 's' : ''}</span>
+                        </div>
+                        <span class="history-time">${escapeHtml(job.time)}</span>
+                    </div>
+                    <div class="history-files">${filesHtml}</div>
+                    ${zipHtml ? `<div class="history-actions">${zipHtml}</div>` : ''}
+                </div>`;
+        }
+
+        loadHistory();
+    </script>
+</body>
+</html>

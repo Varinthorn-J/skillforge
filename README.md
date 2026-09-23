@@ -35,6 +35,11 @@ Local LLM-powered data transformation framework. Define transformation logic in 
 - **Multi-file output** — `---SPLIT---` markers for generating multiple files (e.g. AP Headers + Lines), bundled as ZIP
 - **Real-time logs** — SSE-powered log panel shows LLM processing as it happens
 - **Validation engine** — CSV structure, date formats, numeric values, cross-file key consistency
+- **Self-correction loop** — when output fails validation, the errors are fed back to the LLM to fix automatically (LangGraph state machine, configurable retries)
+- **Async jobs + reconnect** — transforms run as background jobs; the result survives page reloads and navigation, so you can switch tabs while a long transform runs
+- **Input ⟷ Output compare** — toggle any result between the transformed output and the original source, with a per-table row-count selector (10 / 25 / 50 / All)
+- **History** — every past transform is listed from disk with per-file and ZIP downloads, surviving server restarts
+- **LLM observability** — optional [LangSmith](https://smith.langchain.com/) tracing of every prompt, response, latency, token count, and self-correction step
 - **Skill management** — Create, edit, delete, upload skills with category tags (Example/Custom)
 - **Configurable** — `.env` for LLM endpoint, model, output naming, directories
 - **Keyboard shortcuts** — Ctrl+Enter to transform, Escape to close panels
@@ -80,7 +85,51 @@ Edit `.env` to customize:
 | `LLM_MODEL` | `qwen2.5-coder-3b-instruct` | Model name |
 | `OUTPUT_PREFIX` | `skillforge` | Prefix for output filenames |
 | `OUTPUT_SUFFIX` | _(empty)_ | Suffix for output filenames |
+| `SELF_CORRECT_MAX_ATTEMPTS` | `2` | Total LLM attempts per transform (`1` disables self-correction) |
 | `LOG_LEVEL` | `INFO` | Logging level |
+| `LANGSMITH_TRACING` | `false` | Set `true` to trace every LLM call to LangSmith |
+| `LANGSMITH_API_KEY` | _(empty)_ | API key from [smith.langchain.com](https://smith.langchain.com/) |
+| `LANGSMITH_PROJECT` | `skillforge` | Project name traces are grouped under |
+
+### Self-correction (LangGraph)
+
+When a transform's output fails validation (bad date format, non-numeric value,
+mismatched columns, etc.), SkillForge feeds those exact errors back to the LLM
+and asks it to fix them — automatically, without user intervention. This is
+implemented as a small [LangGraph](https://langchain-ai.github.io/langgraph/)
+state machine in [`services/self_correct.py`](services/self_correct.py):
+
+```
+generate ──▶ validate ──passed?──▶ END
+                 │
+              failed & retries left
+                 ▼
+              correct ──▶ validate ──▶ …
+```
+
+Control it with `SELF_CORRECT_MAX_ATTEMPTS` in `.env` (default `2` = one retry).
+Set it to `1` to disable correction. The `/api/process` response includes
+`attempts` and `corrected` so the UI can show when a fix happened. If `langgraph`
+isn't installed, the same loop runs in plain Python — the app still works.
+
+### LLM Observability (LangSmith)
+
+SkillForge can trace every LLM call — prompt, response, latency, and token
+usage — to [LangSmith](https://smith.langchain.com/), which is invaluable for
+debugging skill prompts and comparing model outputs.
+
+1. Create a free account and API key at [smith.langchain.com](https://smith.langchain.com/)
+2. In `.env`, set:
+   ```
+   LANGSMITH_TRACING=true
+   LANGSMITH_API_KEY=lsv2_...
+   LANGSMITH_PROJECT=skillforge
+   ```
+3. Restart the server — traces appear under your project in the LangSmith UI.
+
+Tracing is **fully optional**: with `LANGSMITH_TRACING=false` (the default) the
+app behaves exactly as before and needs no LangSmith account. If the `langsmith`
+package isn't installed at all, the app still runs — tracing just becomes a no-op.
 
 ## Pages
 
@@ -91,6 +140,19 @@ Edit `.env` to customize:
 3. Click **Transform** (or Ctrl+Enter)
 4. View results in table preview with validation report
 5. Download output as CSV or ZIP (multi-file)
+
+The transform runs as a **background job**, so you can switch pages or reload
+without losing it — when you return, the result (and its download button) is
+restored. Use the **Input / Output** toggle to compare the source against the
+transformed result, the **Rows** selector to show more or fewer preview rows,
+and the **✨ Auto-corrected** badge tells you when the self-correction loop
+fixed a validation error.
+
+### History (`/history`)
+
+Lists every past transform, read straight from the `outputs/` folder on disk,
+so it survives server restarts. Each entry shows the job id, timestamp, and
+per-file plus ZIP download links.
 
 ### Skill Generator (`/generator`)
 
@@ -144,11 +206,13 @@ skillforge/
 ├── services/
 │   ├── skill_loader.py       # Parses .md skills with frontmatter
 │   ├── validator.py          # CSV validation engine
+│   ├── self_correct.py       # LangGraph self-correction loop
 │   └── transformer_service.py
 ├── skills/                   # Skill .md files (the "brain")
 ├── templates/
 │   ├── index.html            # Transform page
 │   ├── generator.html        # Skill Generator page
+│   ├── history.html          # Transform history page
 │   └── logs.html             # Standalone logs page
 ├── static/style.css          # Shared CSS
 ├── test_data/                # Sample input/output files
@@ -162,11 +226,16 @@ skillforge/
 |---|---|---|
 | `GET` | `/` | Transform page |
 | `GET` | `/generator` | Skill Generator page |
+| `GET` | `/history` | Transform history page |
+| `GET` | `/logs` | Standalone logs page |
 | `GET` | `/api/skills` | List available skills |
 | `GET` | `/api/skills/{id}` | Get skill content |
 | `PUT` | `/api/skills/{id}` | Update skill content |
 | `DELETE` | `/api/skills/{id}` | Delete a skill |
-| `POST` | `/api/process` | Transform: upload file + skill_id |
+| `POST` | `/api/reload-skills` | Reload skills from disk |
+| `POST` | `/api/process` | Start a transform job → returns `{job_id, status}` |
+| `GET` | `/api/jobs/{job_id}` | Poll a job's status; includes the result when done |
+| `GET` | `/api/history` | List past transforms grouped by job (from `outputs/`) |
 | `POST` | `/api/generate-skill` | Generate skill from input + output examples |
 | `POST` | `/api/upload-skill` | Upload/save a skill file |
 | `GET` | `/api/config` | Get current LLM config |
@@ -177,5 +246,7 @@ skillforge/
 
 - **Backend**: Python, FastAPI, Uvicorn
 - **LLM**: Any OpenAI-compatible server (LM Studio, Ollama, vLLM)
+- **Orchestration**: [LangGraph](https://langchain-ai.github.io/langgraph/) (self-correction loop)
+- **Observability**: [LangSmith](https://smith.langchain.com/) (optional tracing)
 - **Frontend**: Vanilla HTML/CSS/JS (no build step)
 - **Fonts**: Space Grotesk + Inter + JetBrains Mono

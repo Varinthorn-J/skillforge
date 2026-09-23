@@ -23,6 +23,7 @@
             <div class="nav-links">
                 <a href="/" class="nav-link active">Transform</a>
                 <a href="/generator" class="nav-link">Skill Generator</a>
+                <a href="/history" class="nav-link">History</a>
                 <a href="#" class="nav-link" onclick="event.preventDefault(); toggleLogPanel()">Logs</a>
             </div>
             <div class="header-status">
@@ -70,7 +71,13 @@
         <!-- Right: Output -->
         <div class="output">
             <div class="output-header">
-                <div class="panel-label">Output</div>
+                <div style="display:flex;align-items:center;gap:0.85rem;">
+                    <div class="panel-label" id="outputLabel">Output</div>
+                    <div class="view-toggle" id="viewToggle" style="display:none;">
+                        <button class="view-tab" data-view="input" onclick="setView('input')">Input</button>
+                        <button class="view-tab active" data-view="output" onclick="setView('output')">Output</button>
+                    </div>
+                </div>
                 <div id="outputActions"></div>
             </div>
             <div class="pipeline-bar" id="pipelineBar"></div>
@@ -304,23 +311,27 @@
             document.getElementById('processBtn').disabled = !(selectedSkill && selectedFile);
         }
 
-        // --- Process ---
+        // --- Process (job-based: survives page reload / navigation) ---
+        const JOB_KEY = 'skillforge_active_job';
+        let pollTimer = null;
+
+        function setBusy(on) {
+            document.getElementById('emptyState').style.display = on ? 'none' : '';
+            document.getElementById('resultContent').style.display = on ? 'none' : 'block';
+            document.getElementById('loadingState').classList.toggle('visible', on);
+            document.getElementById('pipelineBar').classList.toggle('active', on);
+            document.getElementById('processBtn').disabled = on;
+            if (on) {
+                document.getElementById('outputActions').innerHTML = '';
+                document.getElementById('viewToggle').style.display = 'none';
+                document.getElementById('outputLabel').style.display = '';
+            }
+        }
+
         async function processFile() {
             const btn = document.getElementById('processBtn');
             if (btn.disabled) return;
-
-            const emptyState = document.getElementById('emptyState');
-            const loadingState = document.getElementById('loadingState');
-            const resultContent = document.getElementById('resultContent');
-            const pipelineBar = document.getElementById('pipelineBar');
-            const outputActions = document.getElementById('outputActions');
-
-            btn.disabled = true;
-            emptyState.style.display = 'none';
-            resultContent.style.display = 'none';
-            loadingState.classList.add('visible');
-            pipelineBar.classList.add('active');
-            outputActions.innerHTML = '';
+            setBusy(true);
 
             const formData = new FormData();
             formData.append('file', selectedFile);
@@ -329,51 +340,176 @@
             try {
                 const res = await fetch('/api/process', { method: 'POST', body: formData });
                 const data = await res.json();
-
-                loadingState.classList.remove('visible');
-                pipelineBar.classList.remove('active');
-                resultContent.style.display = 'block';
-
-                if (data.error) {
-                    resultContent.innerHTML = `<div class="error-box">${escapeHtml(data.error)}</div>`;
-                    if (data.raw_output) {
-                        resultContent.innerHTML += `<pre class="result-text-output" style="margin-top:0.75rem">${escapeHtml(data.raw_output)}</pre>`;
-                    }
+                if (data.error || !data.job_id) {
+                    finishBusy();
+                    showResult({ error: data.error || 'Failed to start job' });
                     showToast('Transform failed', true);
-                } else if (data.files) {
-                    let html = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>${data.files.length} files generated</div>`;
-                    data.files.forEach(f => {
-                        html += `<div class="file-section-label">${escapeHtml(f.file)}<a class="btn-download-sm" href="${f.download}" download><svg viewBox="0 0 14 14" fill="none"><path d="M7 2v8M4 7l3 3 3-3M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></a></div>`;
-                        html += renderTable(f.preview, f.row_count);
-                    });
-                    html += renderValidation(data.validation);
-                    resultContent.innerHTML = html;
-                    if (data.download_zip) {
-                        outputActions.innerHTML = `<a class="btn-download" href="${data.download_zip}" download><svg viewBox="0 0 14 14" fill="none"><path d="M7 2v8M4 7l3 3 3-3M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Download ZIP</a>`;
-                    }
-                    showToast(`${data.files.length} files generated`);
-                } else if (data.preview) {
-                    let html = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Transform complete</div>`;
-                    html += renderTable(data.preview, data.row_count);
-                    html += renderValidation(data.validation);
-                    resultContent.innerHTML = html;
-                    if (data.download) {
-                        outputActions.innerHTML = `<a class="btn-download" href="${data.download}" download><svg viewBox="0 0 14 14" fill="none"><path d="M7 2v8M4 7l3 3 3-3M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Download</a>`;
-                    }
-                    showToast('Transform complete');
-                } else if (data.result) {
-                    resultContent.innerHTML = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Analysis complete</div><pre class="result-text-output">${escapeHtml(data.result)}</pre>`;
-                    showToast('Analysis complete');
+                    return;
                 }
+                // Persist the job id so any page reload/navigation can reconnect.
+                sessionStorage.setItem(JOB_KEY, data.job_id);
+                pollJob(data.job_id);
             } catch (err) {
-                loadingState.classList.remove('visible');
-                pipelineBar.classList.remove('active');
-                resultContent.style.display = 'block';
-                resultContent.innerHTML = `<div class="error-box">Connection failed: ${escapeHtml(err.message)}</div>`;
+                finishBusy();
+                showResult({ error: 'Connection failed: ' + err.message });
                 showToast('Connection failed', true);
             }
+        }
 
-            btn.disabled = false;
+        // Poll a running job until it finishes. Safe to call on page load to reconnect.
+        // isResume = true when reconnecting after navigation (suppresses toasts and
+        // treats a missing job as "nothing to show" rather than an error).
+        async function pollJob(jobId, isResume) {
+            clearTimeout(pollTimer);
+            try {
+                const res = await fetch('/api/jobs/' + jobId);
+                if (res.status === 404) {
+                    // Job gone (server restarted or pruned). Stop tracking it.
+                    sessionStorage.removeItem(JOB_KEY);
+                    if (isResume) {
+                        showEmpty();  // nothing to restore — just show the empty state
+                    } else {
+                        finishBusy();
+                        showResult({ error: 'This job expired or was not found (the server may have restarted).' });
+                    }
+                    return;
+                }
+                const job = await res.json();
+                if (job.status === 'processing') {
+                    setBusy(true);  // keep/restore the loading state (e.g. after reconnect)
+                    pollTimer = setTimeout(() => pollJob(jobId), 2000);
+                    return;
+                }
+                // Finished: KEEP the job id in sessionStorage so the result can be
+                // restored again if the user navigates away and comes back.
+                finishBusy();
+                if (job.status === 'error') {
+                    showResult({ error: job.error });
+                    if (!isResume) showToast('Transform failed', true);
+                } else {
+                    showResult(job.result);
+                    if (!isResume) showToast(job.result && job.result.files
+                        ? `${job.result.files.length} files generated` : 'Transform complete');
+                }
+            } catch (err) {
+                // Transient network error — keep trying.
+                pollTimer = setTimeout(() => pollJob(jobId, isResume), 2000);
+            }
+        }
+
+        function showEmpty() {
+            clearTimeout(pollTimer);
+            document.getElementById('loadingState').classList.remove('visible');
+            document.getElementById('pipelineBar').classList.remove('active');
+            document.getElementById('resultContent').style.display = 'none';
+            document.getElementById('emptyState').style.display = '';
+            document.getElementById('viewToggle').style.display = 'none';
+            document.getElementById('outputLabel').style.display = '';
+            document.getElementById('processBtn').disabled = !(selectedSkill && selectedFile);
+        }
+
+        function finishBusy() {
+            document.getElementById('loadingState').classList.remove('visible');
+            document.getElementById('pipelineBar').classList.remove('active');
+            document.getElementById('resultContent').style.display = 'block';
+            document.getElementById('processBtn').disabled = !(selectedSkill && selectedFile);
+        }
+
+        // Reconnect to an in-flight job when the Transform page (re)loads.
+        function resumeActiveJob() {
+            const jobId = sessionStorage.getItem(JOB_KEY);
+            if (jobId) {
+                setBusy(true);
+                pollJob(jobId, true);  // isResume: restore a running OR finished job
+            }
+        }
+
+        // Current result + which view (output/input) is showing, so the toggle
+        // and reconnect can re-render without re-fetching.
+        let lastResult = null;
+        let currentView = 'output';
+
+        function showResult(data) {
+            lastResult = data;
+            currentView = 'output';
+            document.getElementById('emptyState').style.display = 'none';
+            // The input/output toggle only makes sense for a successful CSV transform
+            // that carries an input preview.
+            const canToggle = data && !data.error && (data.files || data.preview) && data.input_preview;
+            const toggle = document.getElementById('viewToggle');
+            toggle.style.display = canToggle ? '' : 'none';
+            // Avoid showing "Output" twice: hide the static label when the toggle is up.
+            document.getElementById('outputLabel').style.display = canToggle ? 'none' : '';
+            document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'output'));
+            renderCurrentView();
+        }
+
+        function setView(view) {
+            if (!lastResult || view === currentView) return;
+            currentView = view;
+            document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+            renderCurrentView();
+        }
+
+        function renderCurrentView() {
+            if (currentView === 'input') renderInputView(lastResult);
+            else renderOutputView(lastResult);
+        }
+
+        function renderInputView(data) {
+            const resultContent = document.getElementById('resultContent');
+            document.getElementById('outputActions').innerHTML = '';  // no download for source
+            resultContent.style.display = 'block';
+            if (!data.input_preview) {
+                resultContent.innerHTML = '<div class="history-empty">Source input is not available for this result.</div>';
+                return;
+            }
+            let html = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M2 3h8M2 6h8M2 9h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>Source input${data.input_filename ? ' &middot; ' + escapeHtml(data.input_filename) : ''}</div>`;
+            html += renderTable(data.input_preview, data.input_row_count);
+            resultContent.innerHTML = html;
+        }
+
+        function renderOutputView(data) {
+            const resultContent = document.getElementById('resultContent');
+            const outputActions = document.getElementById('outputActions');
+            resultContent.style.display = 'block';
+            outputActions.innerHTML = '';
+
+            if (!data || data.error) {
+                resultContent.innerHTML = `<div class="error-box">${escapeHtml((data && data.error) || 'Unknown error')}</div>`;
+                if (data && data.raw_output) {
+                    resultContent.innerHTML += `<pre class="result-text-output" style="margin-top:0.75rem">${escapeHtml(data.raw_output)}</pre>`;
+                }
+            } else if (data.files) {
+                let html = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>${data.files.length} files generated</div>`;
+                html += renderCorrectionBadge(data);
+                data.files.forEach(f => {
+                    html += `<div class="file-section-label">${escapeHtml(f.file)}<a class="btn-download-sm" href="${f.download}" download><svg viewBox="0 0 14 14" fill="none"><path d="M7 2v8M4 7l3 3 3-3M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></a></div>`;
+                    html += renderTable(f.preview, f.row_count);
+                });
+                html += renderValidation(data.validation);
+                resultContent.innerHTML = html;
+                if (data.download_zip) {
+                    outputActions.innerHTML = `<a class="btn-download" href="${data.download_zip}" download><svg viewBox="0 0 14 14" fill="none"><path d="M7 2v8M4 7l3 3 3-3M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Download ZIP</a>`;
+                }
+            } else if (data.preview) {
+                let html = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Transform complete</div>`;
+                html += renderCorrectionBadge(data);
+                html += renderTable(data.preview, data.row_count);
+                html += renderValidation(data.validation);
+                resultContent.innerHTML = html;
+                if (data.download) {
+                    outputActions.innerHTML = `<a class="btn-download" href="${data.download}" download><svg viewBox="0 0 14 14" fill="none"><path d="M7 2v8M4 7l3 3 3-3M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Download</a>`;
+                }
+            } else if (data.result) {
+                resultContent.innerHTML = `<div class="result-badge"><svg viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Analysis complete</div><pre class="result-text-output">${escapeHtml(data.result)}</pre>`;
+            }
+        }
+
+        function renderCorrectionBadge(data) {
+            if (!data.corrected) return '';
+            const n = data.attempts || 2;
+            return `<div class="correction-badge" title="Output failed validation and was automatically re-generated by the self-correction loop">✨ Auto-corrected &middot; ${n} attempt${n > 1 ? 's' : ''}</div>`;
         }
 
         function renderValidation(validation) {
@@ -415,19 +551,41 @@
                 </div>`;
         }
 
+        // How many preview rows to show per table (shared across all tables/views).
+        let rowLimit = 10;
+
+        function setRowLimit(v) {
+            rowLimit = v === 'all' ? Infinity : parseInt(v, 10);
+            renderCurrentView();  // re-render tables with the new limit
+        }
+
         function renderTable(preview, rowCount) {
             if (!preview || !preview.length) return '<p style="color:var(--text-muted)">No data</p>';
             const cols = Object.keys(preview[0]);
+            const total = rowCount || preview.length;
+            const shown = rowLimit === Infinity ? preview : preview.slice(0, rowLimit);
+
             let html = '<div class="table-container"><div class="table-scroll"><table><thead><tr>';
             cols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
             html += '</tr></thead><tbody>';
-            preview.forEach(row => {
+            shown.forEach(row => {
                 html += '<tr>';
                 cols.forEach(c => html += `<td>${escapeHtml(String(row[c] ?? ''))}</td>`);
                 html += '</tr>';
             });
             html += '</tbody></table></div>';
-            html += `<div class="table-footer"><span>${rowCount || preview.length} rows</span></div></div>`;
+
+            // Row-count selector (only when there's more than the smallest option).
+            if (total > 10) {
+                const opts = [10, 25, 50].map(n =>
+                    `<option value="${n}"${rowLimit === n ? ' selected' : ''}>${n}</option>`).join('')
+                    + `<option value="all"${rowLimit === Infinity ? ' selected' : ''}>All</option>`;
+                html += `<div class="table-footer"><span>Showing ${shown.length} of ${total} rows</span>`
+                    + `<label class="row-select">Rows <select onchange="setRowLimit(this.value)">${opts}</select></label></div>`;
+            } else {
+                html += `<div class="table-footer"><span>${total} rows</span></div>`;
+            }
+            html += '</div>';
             return html;
         }
 
@@ -591,6 +749,10 @@
                 processFile();
             }
         });
+
+        // Reconnect to an in-flight transform after reload/navigation.
+        // Runs last so all functions and JOB_KEY are initialized.
+        resumeActiveJob();
     </script>
 </body>
 </html>

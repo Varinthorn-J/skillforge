@@ -1,9 +1,11 @@
 import asyncio
+import functools
 import json
 import logging
 import os
 import csv
 import io
+import time
 import uuid
 import zipfile
 from collections import deque
@@ -54,6 +56,36 @@ from starlette.responses import StreamingResponse
 from openai import OpenAI
 from services.skill_loader import load_skills, Skill
 from services.validator import validate_csv_sections
+from services.self_correct import build_correction_runner
+
+# --- LangSmith tracing (optional) ---------------------------------------
+# When LANGSMITH_TRACING=true and LANGSMITH_API_KEY is set, every LLM call
+# is traced to https://smith.langchain.com. When disabled, wrap_openai and
+# @traceable become no-ops, so the app runs exactly as before.
+try:
+    from langsmith import traceable
+    from langsmith.wrappers import wrap_openai
+    _LANGSMITH_AVAILABLE = True
+except ImportError:  # langsmith not installed — degrade gracefully
+    _LANGSMITH_AVAILABLE = False
+
+    def wrap_openai(client):  # type: ignore
+        return client
+
+    def traceable(*d_args, **d_kwargs):  # type: ignore
+        def _decorator(func):
+            @functools.wraps(func)
+            async def _async_wrapper(*args, **kwargs):
+                kwargs.pop("langsmith_extra", None)  # swallow tracing-only kwarg
+                return await func(*args, **kwargs)
+
+            @functools.wraps(func)
+            def _sync_wrapper(*args, **kwargs):
+                kwargs.pop("langsmith_extra", None)
+                return func(*args, **kwargs)
+
+            return _async_wrapper if asyncio.iscoroutinefunction(func) else _sync_wrapper
+        return _decorator
 
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://127.0.0.1:1234/v1")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "lm-studio")
@@ -63,12 +95,29 @@ OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
 SKILLS_DIR = os.getenv("SKILLS_DIR", "skills")
 OUTPUT_PREFIX = os.getenv("OUTPUT_PREFIX", "skillforge")
 OUTPUT_SUFFIX = os.getenv("OUTPUT_SUFFIX", "")
+# Total LLM attempts per transform: 1 = generate only (no self-correction),
+# 2 = one retry if validation fails, etc.
+SELF_CORRECT_MAX_ATTEMPTS = int(os.getenv("SELF_CORRECT_MAX_ATTEMPTS", "2"))
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 skills: list[Skill] = []
 llm_client: OpenAI | None = None
+
+# In-memory job store for async transforms. Keyed by job_id.
+# Each entry: {"status": "processing"|"done"|"error", "skill_id", "filename",
+#              "created_at", "result": dict|None, "error": str|None}
+# Survives page reloads/navigation because it lives on the server, not the page.
+jobs: dict[str, dict] = {}
+MAX_JOBS = 50  # keep the store bounded (drop oldest when exceeded)
+
+
+def _prune_jobs() -> None:
+    if len(jobs) <= MAX_JOBS:
+        return
+    for old_id in sorted(jobs, key=lambda j: jobs[j]["created_at"])[: len(jobs) - MAX_JOBS]:
+        jobs.pop(old_id, None)
 
 SPLIT_MARKERS = ["---SPLIT---", "===SPLIT===", "=== Header ===", "=== Lines ==="]
 
@@ -78,8 +127,15 @@ async def lifespan(app: FastAPI):
     global skills, llm_client
     skills = load_skills(SKILLS_DIR)
     logger.info("Loaded %d skills", len(skills))
-    llm_client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+    llm_client = wrap_openai(OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY))
     logger.info("LLM client connected to %s", LLM_BASE_URL)
+    if _LANGSMITH_AVAILABLE and os.getenv("LANGSMITH_TRACING", "").lower() == "true":
+        logger.info(
+            "LangSmith tracing ENABLED -> project '%s'",
+            os.getenv("LANGSMITH_PROJECT", "default"),
+        )
+    else:
+        logger.info("LangSmith tracing disabled")
     yield
 
 
@@ -91,22 +147,34 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Pages
 # ---------------------------------------------------------------------------
 
+# Prevent browsers from serving a stale cached page (which would run old JS
+# and miss features like job reconnect). HTML is small, so always revalidate.
+_NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate"}
+
+
+def _html_page(path: str) -> HTMLResponse:
+    with open(path, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read(), headers=_NO_CACHE)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    with open("templates/index.html", "r", encoding="utf-8") as f:
-        return f.read()
+    return _html_page("templates/index.html")
 
 
 @app.get("/generator", response_class=HTMLResponse)
 async def generator():
-    with open("templates/generator.html", "r", encoding="utf-8") as f:
-        return f.read()
+    return _html_page("templates/generator.html")
 
 
 @app.get("/logs", response_class=HTMLResponse)
 async def logs_page():
-    with open("templates/logs.html", "r", encoding="utf-8") as f:
-        return f.read()
+    return _html_page("templates/logs.html")
+
+
+@app.get("/history", response_class=HTMLResponse)
+async def history_page():
+    return _html_page("templates/history.html")
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +262,8 @@ async def reload_skills():
 
 @app.post("/api/process")
 async def process_file(file: UploadFile, skill_id: str = Form(...)):
+    """Start a transform as a background job and return its id immediately.
+    Poll GET /api/jobs/{job_id} for progress — the result survives page reloads."""
     skill = next((s for s in skills if s.id == skill_id), None)
     if not skill:
         return JSONResponse({"error": f"Skill '{skill_id}' not found"}, status_code=400)
@@ -202,27 +272,101 @@ async def process_file(file: UploadFile, skill_id: str = Form(...)):
     input_path = os.path.join(UPLOAD_DIR, f"{job_id}_{file.filename}")
     with open(input_path, "wb") as f:
         f.write(await file.read())
-
     file_content = _read_file_content(input_path)
 
+    jobs[job_id] = {
+        "status": "processing",
+        "skill_id": skill_id,
+        "filename": file.filename,
+        "created_at": time.time(),
+        "result": None,
+        "error": None,
+    }
+    _prune_jobs()
+    # Fire-and-forget: runs in the background, independent of this request/page.
+    asyncio.create_task(_process_job(job_id, skill, file_content))
+    logger.info("[%s] Job accepted for skill '%s'", job_id, skill_id)
+    return {"job_id": job_id, "status": "processing"}
+
+
+async def _process_job(job_id: str, skill: Skill, file_content: str) -> None:
+    """Background worker: run the transform and store the result in `jobs`."""
+    skill_id = skill.id
     try:
         logger.info("[%s] Processing with skill '%s'", job_id, skill_id)
-        llm_output = await _call_llm(skill.instructions, file_content)
-        logger.info("[%s] LLM returned %d chars", job_id, len(llm_output))
+        transform_result = await _run_transform(
+            skill.instructions,
+            file_content,
+            langsmith_extra={
+                "metadata": {"skill_id": skill_id, "job_id": job_id, "operation": "transform"},
+                "tags": ["transform", f"skill:{skill_id}"],
+            },
+        )
+        llm_output = transform_result["output"]
+        logger.info(
+            "[%s] LLM returned %d chars (attempts=%d, self-corrected=%s)",
+            job_id, len(llm_output), transform_result["attempts"], transform_result["corrected"],
+        )
+        if transform_result["corrected"]:
+            logger.info("[%s] Output was auto-corrected after validation errors", job_id)
 
         detected_marker = _detect_split_marker(llm_output)
         if detected_marker:
             logger.info("[%s] Multi-output detected (marker: %s)", job_id, detected_marker)
-            return _handle_multi_output(llm_output, detected_marker, job_id, skill)
-        return _handle_single_output(llm_output, job_id, skill)
+            response = _handle_multi_output(llm_output, detected_marker, job_id, skill)
+        else:
+            response = _handle_single_output(llm_output, job_id, skill)
+        response["attempts"] = transform_result["attempts"]
+        response["corrected"] = transform_result["corrected"]
+        # Attach a preview of the SOURCE input so the UI can toggle input vs output.
+        response["input_filename"] = jobs[job_id]["filename"]
+        response["input_preview"] = _csv_preview(file_content)
+        response["input_row_count"] = _count_csv_rows(file_content)
+
+        jobs[job_id].update(status="done", result=response)
+        logger.info("[%s] Job done", job_id)
     except Exception as e:
         logger.error("[%s] Process failed: %s", job_id, str(e))
-        return JSONResponse({"error": str(e)}, status_code=500)
+        jobs[job_id].update(status="error", error=str(e))
+
+
+@app.get("/api/jobs/{job_id}")
+async def get_job(job_id: str):
+    """Return a job's current status; includes the result once status is 'done'."""
+    job = jobs.get(job_id)
+    if not job:
+        return JSONResponse({"error": "Job not found or expired"}, status_code=404)
+    payload = {"job_id": job_id, "status": job["status"], "skill_id": job["skill_id"], "filename": job["filename"]}
+    if job["status"] == "done":
+        payload["result"] = job["result"]
+    elif job["status"] == "error":
+        payload["error"] = job["error"]
+    return payload
 
 
 # ---------------------------------------------------------------------------
 # LLM — Send skill instructions + file content to the model
 # ---------------------------------------------------------------------------
+
+def _extract_text(content) -> str:
+    """Normalize an LLM message.content that may be a str, None, or a list of
+    content blocks (some OpenAI-compatible servers return the latter)."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                parts.append(block.get("text") or block.get("content") or "")
+            else:  # pydantic content-block object
+                parts.append(getattr(block, "text", "") or "")
+        return "".join(parts)
+    return str(content)
+
 
 def _call_llm_sync(instructions: str, file_content: str) -> str:
     response = llm_client.chat.completions.create(
@@ -233,11 +377,46 @@ def _call_llm_sync(instructions: str, file_content: str) -> str:
         ],
         temperature=0.0,
     )
-    return response.choices[0].message.content.strip()
+    return _extract_text(response.choices[0].message.content).strip()
 
 
+@traceable(run_type="chain", name="skillforge.generate")
 async def _call_llm(instructions: str, file_content: str) -> str:
     return await asyncio.to_thread(_call_llm_sync, instructions, file_content)
+
+
+def _parse_output_sections(text: str) -> list[dict]:
+    """Split raw LLM output into validatable sections (mirrors the save path)."""
+    marker = _detect_split_marker(text)
+    if marker:
+        parts = [s.strip() for s in text.split(marker) if s.strip()]
+        return [
+            {"name": f"file{i + 1}", "content": _strip_code_fences(p)}
+            for i, p in enumerate(parts)
+        ]
+    return [{"name": "output", "content": _strip_code_fences(text)}]
+
+
+# Built lazily so _call_llm_sync / _parse_output_sections exist first.
+_correction_runner = None
+
+
+def _get_correction_runner():
+    global _correction_runner
+    if _correction_runner is None:
+        _correction_runner = build_correction_runner(
+            llm_call=_call_llm_sync,
+            parse_sections=_parse_output_sections,
+            max_attempts=SELF_CORRECT_MAX_ATTEMPTS,
+        )
+    return _correction_runner
+
+
+@traceable(run_type="chain", name="skillforge.transform")
+async def _run_transform(instructions: str, file_content: str) -> dict:
+    """Run the generate -> validate -> correct loop. Returns the runner's dict."""
+    runner = _get_correction_runner()
+    return await asyncio.to_thread(runner, instructions, file_content)
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +436,9 @@ def _save_csv(content: str, path: str) -> int:
     return content.count("\n")
 
 
-def _csv_preview(content: str, max_rows: int = 10) -> list[dict]:
-    """Parse CSV text into a list of dicts for table preview."""
+def _csv_preview(content: str, max_rows: int = 200) -> list[dict]:
+    """Parse CSV text into a list of dicts for table preview.
+    Sends up to max_rows so the UI can let the user choose how many to show."""
     reader = csv.DictReader(io.StringIO(content.strip()))
     rows = []
     for i, row in enumerate(reader):
@@ -485,7 +665,19 @@ async def generate_skill(
 
     logger.info("[%s] Generating skill from %d output file(s)", job_id, len(output_files))
 
-    skill_content = await _call_llm(SKILL_GEN_PROMPT, user_message)
+    skill_content = await _call_llm(
+        SKILL_GEN_PROMPT,
+        user_message,
+        langsmith_extra={
+            "metadata": {
+                "skill_id": skill_name or "(unnamed)",
+                "job_id": job_id,
+                "operation": "generate-skill",
+                "output_file_count": len(output_files),
+            },
+            "tags": ["generate-skill"],
+        },
+    )
     logger.info("[%s] Skill generated (%d chars)", job_id, len(skill_content))
 
     return {
@@ -541,6 +733,46 @@ async def download_file(filename: str):
 
     media = "application/zip" if filename.endswith(".zip") else "text/csv"
     return FileResponse(path, filename=filename, media_type=media)
+
+
+# ---------------------------------------------------------------------------
+# API — History (persistent: reads the outputs/ folder on disk)
+# ---------------------------------------------------------------------------
+
+def _scan_history() -> list[dict]:
+    """Group files in OUTPUT_DIR by job_id so past transforms can be re-downloaded.
+    Reads the disk, so results survive server restarts."""
+    prefix = f"{OUTPUT_PREFIX}_"
+    groups: dict[str, dict] = {}
+    if not os.path.isdir(OUTPUT_DIR):
+        return []
+    for fn in os.listdir(OUTPUT_DIR):
+        path = os.path.join(OUTPUT_DIR, fn)
+        if not os.path.isfile(path) or not fn.startswith(prefix):
+            continue
+        rest = fn[len(prefix):]
+        # job_id is the first token; also handles single files named prefix_jobid.csv
+        job_id = rest.split("_", 1)[0].rsplit(".", 1)[0]
+        stat = os.stat(path)
+        g = groups.setdefault(job_id, {"job_id": job_id, "files": [], "zip": None, "mtime": 0.0})
+        g["mtime"] = max(g["mtime"], stat.st_mtime)
+        item = {"filename": fn, "download": f"/api/download/{fn}", "size": stat.st_size}
+        if fn.endswith(".zip"):
+            g["zip"] = item
+        else:
+            g["files"].append(item)
+    history = sorted(groups.values(), key=lambda g: g["mtime"], reverse=True)
+    for g in history:
+        g["files"].sort(key=lambda f: f["filename"])
+        g["time"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(g["mtime"]))
+        g["file_count"] = len(g["files"])
+        g.pop("mtime", None)
+    return history
+
+
+@app.get("/api/history")
+async def get_history():
+    return _scan_history()
 
 
 # ---------------------------------------------------------------------------
