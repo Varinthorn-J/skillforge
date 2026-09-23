@@ -71,7 +71,12 @@ def _validate_empty_values(result: ValidationResult, name: str, content: str):
     reader = csv.DictReader(io.StringIO(content.strip()))
     for i, row in enumerate(reader, start=2):
         for col, val in row.items():
-            if val is None or val.strip() == "":
+            # col is None for extra unnamed fields DictReader collects under the
+            # restkey (as a list) when a row has more columns than the header;
+            # the column-count mismatch is already reported by structure checks.
+            if col is None:
+                continue
+            if val is None or (isinstance(val, str) and val.strip() == ""):
                 result.add("warning", name, "Empty value", row=i, column=col)
 
 
